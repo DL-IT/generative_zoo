@@ -136,19 +136,39 @@ class Discriminator(nn.Module):
 			discriminator_layers	= make_conv_layer(discriminator_layers, n_hidden, n_hidden*2, back_conv=False, activation='LeakyReLU')
 			cur_size 		= cur_size // 2
 			n_hidden		= n_hidden*2
-		discriminator_layers	= make_conv_layer(discriminator_layers, n_hidden, 1, back_conv=False, activation='Sigmoid', k_s_p=[4,1,0])
+		
+		trial	= V(t.randn(1, n_chan, image_size, image_size))
+		for layer in discriminator_layers:
+			trial	= layer(trial)
+
+		self.fc_in	= trial.size(1) * trial.size(2) * trial.size(3)
+		self.fc_out	= 1024
 		
 		for i, layer in enumerate(discriminator_layers):
 			self.discriminator.add_module('component_{0}'.format(i+1), layer)
+		
+		self.discriminator_lth	= nn.Sequential()
+		self.discriminator_lth.add_module('component_1', nn.Linear(self.fc_in, self.fc_out))
+		self.discriminator_lth.add_module('component_2', nn.LeakyReLU(0.2, inplace=True))
+		
+		self.discriminator_last	= nn.Sequential()
+		self.discriminator_last.add_module('component_1', nn.Linear(self.fc_out, 1))
+		self.discriminator_last.add_module('component_2', nn.Sigmoid())
 			
 	def forward(self, input):
 		pass_	= input
 		if self.ngpu > 0:
 			pass_	= nn.parallel.data_parallel(self.discriminator, pass_, range(0, self.ngpu))
+			pass_	= pass_.view(-1, self.fc_in)
+			lth	= nn.parallel.data_parallel(self.discriminator_lth, pass_, range(0, self.ngpu))
+			pass_	= nn.parallel.data_parallel(self.discriminator_last, lth, range(0, self.ngpu))
 		else:
 			pass_	= self.discriminator(pass_)
+			pass_	= pass_.view(-1, self.fc_in)
+			lth	= self.discriminator_lth(pass_)
+			pass_	= self.discriminator_last(lth)
 	
-		return pass_.view(-1, 1)
+		return (pass_.view(-1, 1), lth)
 		
 class Generator(nn.Module):
 	def __init__(self, image_size, n_chan, n_enc_hidden, n_dec_hidden, n_z, ngpu):

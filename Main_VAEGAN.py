@@ -70,42 +70,40 @@ label		= t.FloatTensor(b_size)
 
 # Optimizers and Loss Functions
 
-Enc_optim	= t.optim.Adam(Enc_net.parameters(), lr=G_lr, betas=(0.5, 0.999))
-Dec_optim	= t.optim.Adam(Dec_net.parameters(), lr=G_lr, betas=(0.5, 0.999))
-Dis_optim	= t.optim.Adam(Dis_net.parameters(), lr=D_lr, betas=(0.5, 0.999))
-
-loss_BCE	= nn.BCELoss(size_average=False)
-loss_MSE	= nn.MSELoss(size_average=False)
+Enc_optim	= t.optim.RMSprop(Enc_net.parameters(), lr=G_lr)
+Dec_optim	= t.optim.RMSprop(Dec_net.parameters(), lr=G_lr)
+Dis_optim	= t.optim.RMSprop(Dis_net.parameters(), lr=D_lr)
 
 def loss_KLD(terms):
 	means	= terms[0]
 	logcovs	= terms[1]
-	KLD	= means.pow(2).add_(logcovs.exp()).mul_(-1).add_(logcovs).add_(1)
-	KLD	= t.sum(KLD).mul_(-0.5)
+	KLD	= (means.clone()).pow(2)
+	KLD	= KLD + (logcovs.clone()).exp_()
+	KLD	= KLD*(-1)
+	KLD	= KLD + 1 + logcovs
+	KLD	= KLD.sum(1)
+	KLD	= KLD*(-0.5)
+	KLD	= KLD.mean()
 	
 	return KLD
 	
-def loss_Dis_Llike(terms):
+def loss_Recons(terms):
 	x	= terms[0]
 	means	= terms[1]
-	logcovs	= terms[2]
 
-	pass_	= x
-	pass_	= pass_ - means
-	pass_	= pass_.pow(2)
-	covs	= logcovs.exp()
-	pass_	= pass_.div(covs)
-	pass_	= pass_ + logcovs
-	pass_	= pass_.add_(2*np.pi)
-	pass_	= pass_.mul(-0.5)
-	pass_	= (pass_.sum()).view(-1, 1)
-	return pass_
+	rec_ls	= (x - means).clone()
+	rec_ls	= rec_ls.pow(2)
+	rec_ls	= rec_ls + np.log(2*np.pi)
+	rec_ls	= rec_ls*0.5
+	rec_ls	= rec_ls.sum(1)
+	rec_ls	= rec_ls.mean()
 	
+	return rec_ls
+		
 if ngpu > 0:
 	Enc_net.cuda()
 	Dec_net.cuda()
 	Dis_net.cuda()
-	loss_BCE.cuda()
 	inpt	= inpt.cuda()
 	label	= label.cuda()
 	noise	= noise.cuda()
@@ -142,20 +140,22 @@ for epoch in range(0, opt.max_epochs):
 		L_prior	= loss_KLD(outputs)
 		X_recns	= Dec_net(vg.Parameterizer(outputs, ngpu))
 		
-		# fix L^{Dis_{l}}_{llike} term
-		Dis_real	= Dis_net(inptv)
-		Dis_real_recons	= Dis_net(X_recns)
-		if ngpu > 0:
-			L_disll	= loss_Dis_Llike([Dis_real, Dis_real_recons, V(t.zeros(Dis_real.size()).cuda())]).mul(-1).sum()
-		else:
-			L_disll	= loss_Dis_Llike([Dis_real, Dis_real_recons, V(t.zeros(Dis_real.size()))]).mul(-1).sum()	
+		(Dis_real, Dis_real_lth)	= Dis_net(inptv)
+		(Dis_recns, Dis_recns_lth)	= Dis_net(X_recns)
+
+		L_disll	= loss_Recons([Dis_real_lth, Dis_recns_lth])
 		
-		X_p	= Dec_net(noisev)
+		X_p		= Dec_net(noisev)
+		Dis_X_p, _	= Dis_net(X_p)
 		
-		L_gan	= (t.log(Dis_real) + t.log(Dis_real_recons.mul(-1).add_(1)) + t.log(Dis_net(X_p).mul(-1).add_(1))).sum()
+		L_gan	= (t.log(Dis_real) + t.log(1 - Dis_recns + 1e-08) + t.log(1 - Dis_X_p + 1e-08)).mean()
 		
-		L	= L_gan + L_prior + L_disll
-		L.backward()
+		L_enc	= L_prior + L_disll
+		L_dec	= L_disll - L_gan
+		L_dis	= L_gan
+		L_enc.backward(retain_variables=True)
+		L_dec.backward(retain_variables=True)
+		L_dis.backward()
 		
 		Enc_optim.step()
 		Dec_optim.step()
@@ -163,8 +163,8 @@ for epoch in range(0, opt.max_epochs):
 		
 		gen_iterations	= gen_iterations + 1
 		
-		if gen_iterations % 10 == 1:
-			print('[{0}/{1}][{2}/{3}]\tL_prior: {4}\tL_disll: {5}\tL_gan: {6}'.format(epoch, opt.max_epochs, i, len(d_loader), round(L_prior.data[0], 5), round(L_disll.data[0], 5), round(L_gan.data[0], 5)))
+#		if gen_iterations % 10 == 1:
+		print('[{0}/{1}][{2}/{3}]\tL_prior: {4}\tL_disll: {5}\tL_gan: {6}'.format(epoch, opt.max_epochs, i, len(d_loader), round(L_prior.data[0], 5), round(L_disll.data[0], 5), round(L_gan.data[0], 5)))
 				
 		if gen_iterations % 200 == 0:
 			fake	= Dec_net(V(fixed_noise))
