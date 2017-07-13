@@ -37,7 +37,6 @@ class ALPHAGAN(object):
 		self.n_z	= n_z
 		self.image_size	= image_size
 		self.n_chan	= n_chan
-		self.loss_L1	= nn.L1Loss(size_average=False)
 		
 	def train(self, dataset, batch_size, n_iters, lmbda, optimizer_details, show_period=50, display_images=True, misc_options=['init_scheme', 'save_model']):
 		"""
@@ -127,37 +126,26 @@ class ALPHAGAN(object):
 				noise.normal_(0, 1)
 				noiseV	= V(noise)
 				
-				# Get all the passes
-				real_encoded	= self.Enc_net(inptV)
-				real_reconst	= self.Gen_net(real_encoded)
-				fake_generat	= self.Gen_net(noiseV)
-				
-				# Get the components of the losses
-				reconst_loss	= (self.loss_L1(real_reconst, inptV)).mul(lmbda)
-				discrim_real	= self.Dis_net(inptV)
-				discrim_recons	= self.Dis_net(real_reconst)
-				discrim_fake	= self.Dis_net(fake_generat)
-				cde_disc_encd	= self.Cde_dis(real_encoded)
-				cde_disc_prr	= self.Cde_dis(noiseV)
+				# Get all the passes and all the components of the losses
 				
 				# Encoder Pass
-				encoder_loss	= reconst_loss - t.log(cde_disc_encd).sum()
-				encoder_loss.backward(retain_variables=True)
+				encoder_loss	= (self.Gen_net(self.Enc_net(inptV)) - inptV).abs().sum() - t.log(self.Cde_dis(self.Enc_net(inptV))).sum()
+				encoder_loss.backward()
 				Enc_optmzr.step()
 				
 				# Generator Pass
-				generator_loss	= reconst_loss - (t.log(discrim_recons) + t.log(discrim_fake)).sum()
-				generator_loss.backward(retain_variables=True)
+				generator_loss	= (self.Gen_net(self.Enc_net(inptV)) - inptV).abs().sum() - (t.log(self.Dis_net(self.Gen_net(self.Enc_net(inptV)))) + t.log(self.Gen_net(noiseV))).sum()
+				generator_loss.backward()
 				Gen_optmzr.step()
 				
 				# Discriminator Pass
-				discrimin_loss	= ((t.log(discrim_real) + t.log(1 - discrim_recons) + t.log(1 - discrim_fake)).sum()).mul(-1)
-				discrimin_loss.backward(retain_variables=True)
+				discrimin_loss	= ((t.log(self.Dis_net(inptV)) + t.log(1 - self.Dis_net(self.Gen_net(self.Enc_net(inptV)))) + t.log(1 - self.Dis_net(self.Gen_net(noiseV)))).sum()).mul(-1)
+				discrimin_loss.backward()
 				Dis_optmzr.step()
 				
 				# Code Discriminator Pass
-				cde_disc_loss	= ((t.log(cde_disc_encd) + t.log(1 - cde_disc_prr)).sum()).mul(-1)
-				cde_disc_loss.backward(retain_variables=True)
+				cde_disc_loss	= ((t.log(self.Cde_dis(self.Enc_net(inptV))) + t.log(1 - self.Cde_dis(noiseV))).sum()).mul(-1)
+				cde_disc_loss.backward()
 				Cde_optmzr.step()
 				
 				gen_iters	= gen_iters + 1
@@ -169,14 +157,14 @@ class ALPHAGAN(object):
 				# Saving the real, reconstructed and generated images every show_period*5 iterations
 				if display_images == True:
 					if gen_iters % (show_period*5) == 0:
-						gen_imgs	= self.Gen_net(V(fixed_noise))
+						gen_imgs	= self.Gen_net(V(fixed_noise).detach())
 						
 						# Normalizing the images to look better
 						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
 						tv_utils.save_image(gen_imgs.data, 'Generated_images@iteration={0}.png'.format(gen_iters))
 						
 						X		= X.mul(0.5).add(0.5)
-						real_reconst.data	= real_reconst.data.mul(0.5).add(0.5)
+						real_reconst	= self.Gen_net(self.Enc_net(inptV.detach()).detach())
 						tv_utils.save_image(X, 'Real_images@iteration={0}.png'.format(gen_iters))
 						tv_utils.save_image(real_reconst.data, 'Reconstructed_images@iteration={0}.png'.format(gen_iters))
 						
@@ -242,7 +230,6 @@ class Encoder(nn.Module):
 		self.enc_lin	= nn.Sequential()
 		self.enc_lin.add_module('linear_1-{0}-{1}'.format(self.lin_hid, n_z), nn.Linear(self.lin_hid, n_z))
 		self.enc_lin.add_module('batchnorm_1-{0}'.format(n_z), nn.BatchNorm1d(n_z))
-		self.enc_lin.add_module('Tanh_1', nn.Tanh())
 		
 	def forward(self, input):
 		pass_	= input
