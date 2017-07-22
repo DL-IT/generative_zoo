@@ -20,15 +20,22 @@ class ALPHAGAN(object):
 			n_chan		= Number of channels of the real images
 			hiddens		= Number of feature maps in the frist layer of the encoder, generator, discriminator and the number of nodes in the hidden layer of the code discriminator
 					  Format:
-					  	hiddens	= {'enc': n_enc_hidden,
-					  		   'gen': n_gen_hidden,
+					  	hiddens	= {'enc': {
+					  				'lin'	: n_enc_hidden_for_fully_connected,
+					  				'conv'	: n_enc_hidden_for_convolutional_first_layer
+					  			  },
+					  		   'gen': {
+					  				'lin'	: n_gen_hidden_for_fully_connected,
+					  				'conv'	: n_gen_hidden_for_convolutional_first_layer
+					  			  },	
 					  		   'dis': n_dis_hidden,
 					  		   'cde': n_cde_hidden
 					  		  }
+			code_dis_depth	= Number of layers in the Code Discriminator (since it is an MLP)
 			ngpu		= Number of gpus to be allocated, if to be run on gpu
 			loss		= The loss funcion to be used
 		"""
-		super(ALPHAGAN, self).__init()
+		super(ALPHAGAN, self).__init__()
 		self.Enc_net	= Encoder(image_size, n_z, n_chan, hiddens['enc'], ngpu)
 		self.Gen_net	= Generator(image_size, n_z, n_chan, hiddens['gen'], ngpu)
 		self.Dis_net	= Discriminator(image_size, n_chan, hiddens['dis'], ngpu)
@@ -131,21 +138,23 @@ class ALPHAGAN(object):
 				# Encoder Pass
 				encoder_loss	= (self.Gen_net(self.Enc_net(inptV)) - inptV).abs().sum() - t.log(self.Cde_dis(self.Enc_net(inptV))).sum()
 				encoder_loss.backward()
-				Enc_optmzr.step()
 				
 				# Generator Pass
 				generator_loss	= (self.Gen_net(self.Enc_net(inptV)) - inptV).abs().sum() - (t.log(self.Dis_net(self.Gen_net(self.Enc_net(inptV)))) + t.log(self.Gen_net(noiseV))).sum()
 				generator_loss.backward()
-				Gen_optmzr.step()
 				
 				# Discriminator Pass
 				discrimin_loss	= ((t.log(self.Dis_net(inptV)) + t.log(1 - self.Dis_net(self.Gen_net(self.Enc_net(inptV)))) + t.log(1 - self.Dis_net(self.Gen_net(noiseV)))).sum()).mul(-1)
 				discrimin_loss.backward()
-				Dis_optmzr.step()
 				
 				# Code Discriminator Pass
 				cde_disc_loss	= ((t.log(self.Cde_dis(self.Enc_net(inptV))) + t.log(1 - self.Cde_dis(noiseV))).sum()).mul(-1)
 				cde_disc_loss.backward()
+
+				# Perform the updates simultaneously
+				Enc_optmzr.step()
+				Gen_optmzr.step()
+				Dis_optmzr.step()
 				Cde_optmzr.step()
 				
 				gen_iters	= gen_iters + 1
@@ -206,7 +215,7 @@ class Encoder(nn.Module):
 
 		self.enc_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_chan, n_enc_hidden), nn.Conv2d(n_chan, n_enc_hidden, kernel_size=4, stride=2, padding=1, bias=False))
 		self.enc_conv.add_module('batchnorm_{0}-{1}'.format(layer, n_enc_hidden), nn.BatchNorm2d(n_enc_hidden))
-		self.enc_conv.add_module('ELU_{0}'.format(layer), nn.ELU(1.67326, inplace=True))
+		self.enc_conv.add_module('ReLU_{0}'.format(layer), nn.ReLU())
 		
 		# Keep convolving until the size of the feature map is 4
 
@@ -216,7 +225,7 @@ class Encoder(nn.Module):
 			layer	= layer + 1
 			self.enc_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_enc_hidden, n_enc_hidden*2), nn.Conv2d(n_enc_hidden, n_enc_hidden*2, kernel_size=4, stride=2, padding=1, bias=False))
 			self.enc_conv.add_module('batchnorm_{0}-{1}'.format(layer, n_enc_hidden*2), nn.BatchNorm2d(n_enc_hidden*2))
-			self.enc_conv.add_module('ELU_{0}'.format(layer), nn.ELU(1.67326, inplace=True))
+			self.enc_conv.add_module('ReLU_{0}'.format(layer), nn.ReLU())
 			cur_size	= cur_size//2
 			n_enc_hidden	= n_enc_hidden*2
 			
@@ -225,7 +234,7 @@ class Encoder(nn.Module):
 		layer	= layer + 1
 		self.enc_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_enc_hidden, self.lin_hid), nn.Conv2d(n_enc_hidden, self.lin_hid, kernel_size=4, stride=1, padding=0, bias=False))
 		self.enc_conv.add_module('batchnorm_{0}-{1}'.format(layer, self.lin_hid), nn.BatchNorm2d(self.lin_hid))
-		self.enc_conv.add_module('ELU_{0}'.format(layer), nn.ELU(1.67326, inplace=True))
+		self.enc_conv.add_module('ReLU_{0}'.format(layer), nn.ReLU())
 		
 		self.enc_lin	= nn.Sequential()
 		self.enc_lin.add_module('linear_1-{0}-{1}'.format(self.lin_hid, n_z), nn.Linear(self.lin_hid, n_z))
@@ -270,7 +279,7 @@ class Generator(nn.Module):
 
 		self.gen_lin.add_module('linear_{0}-{1}-{2}'.format(layer, n_z, self.lin_hid), nn.Linear(n_z, self.lin_hid))
 		self.gen_lin.add_module('batchnorm_{0}-{1}'.format(layer, self.lin_hid), nn.BatchNorm1d(self.lin_hid))
-		self.gen_lin.add_module('PReLU_{0}'.format(layer), nn.PReLU())
+		self.gen_lin.add_module('ReLU_{0}'.format(layer), nn.ReLU())
 		
 		# The subnet gen_conv converts the output from gen_lin into a tensor of the dimensions of the actual image
 
@@ -279,7 +288,7 @@ class Generator(nn.Module):
 		layer		= 1
 		self.gen_conv.add_module('conv_{0}-{1}-{2}'.format(layer, self.lin_hid, self.conv_hid), nn.ConvTranspose2d(self.lin_hid, self.conv_hid, kernel_size=4, stride=1, padding=0, bias=False))
 		self.gen_conv.add_module('batchnorm_{0}-{1}'.format(layer, self.conv_hid), nn.BatchNorm2d(self.conv_hid))
-		self.gen_conv.add_module('PReLU_{0}'.format(layer), nn.PReLU())
+		self.gen_conv.add_module('ReLU_{0}'.format(layer), nn.ReLU())
 		
 		# Keep enlarging until size of the feature map is image_size//2
 
@@ -288,7 +297,7 @@ class Generator(nn.Module):
 			layer	= layer + 1
 			self.gen_conv.add_module('conv_{0}-{1}-{2}'.format(layer, self.conv_hid, self.conv_hid//2), nn.ConvTranspose2d(self.conv_hid, self.conv_hid//2, kernel_size=4, stride=2, padding=1, bias=False))
 			self.gen_conv.add_module('batchnorm_{0}-{1}'.format(layer, self.conv_hid//2), nn.BatchNorm2d(self.conv_hid//2))
-			self.gen_conv.add_module('PReLU_{0}'.format(layer), nn.PReLU())
+			self.gen_conv.add_module('ReLU_{0}'.format(layer), nn.ReLU())
 			cur_size	= cur_size * 2
 			self.conv_hid	= self.conv_hid // 2
 			
@@ -296,7 +305,6 @@ class Generator(nn.Module):
 
 		layer		= layer + 1
 		self.gen_conv.add_module('conv_{0}-{1}-{2}'.format(layer, self.conv_hid, n_chan), nn.ConvTranspose2d(self.conv_hid, n_chan, kernel_size=4, stride=2, padding=1, bias=False))
-		self.gen_conv.add_module('batchnorm_{0}-{1}'.format(layer, n_chan), nn.BatchNorm2d(n_chan))
 		self.gen_conv.add_module('Tanh_{0}'.format(layer), nn.Tanh())
 		
 	def forward(self, input):
@@ -346,7 +354,6 @@ class Discriminator(nn.Module):
 			
 		layer	= layer + 1
 		main.add_module('conv_{0}-{1}-{2}'.format(layer, n_dis_hidden, 1), nn.Conv2d(n_dis_hidden, 1, kernel_size=4, stride=1, padding=0, bias=False))
-		main.add_module('batchnorm_{0}-{1}'.format(layer, 1), nn.BatchNorm2d(1))
 		main.add_module('Sigmoid_{0}'.format(layer), nn.Sigmoid())
 		
 		self.discriminator	= main
@@ -382,7 +389,6 @@ class Code_Discriminator(nn.Module):
 			
 		layer		= layer + 1
 		main.add_module('linear_{0}-{1}-{2}'.format(layer, n_hidden, 1), nn.Linear(n_hidden, 1))
-		main.add_module('batchnorm_{0}-{1}'.format(layer, 1), nn.BatchNorm1d(1))
 		main.add_module('Sigmoid_{0}'.format(layer), nn.Sigmoid())
 		
 		self.code_dis	= main

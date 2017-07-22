@@ -9,12 +9,9 @@ generative_zoo is a repository that provides working implementations of some gen
 | Multilayer Perceptron GAN (MLPGAN) | Generative Adversarial Network with MLP Generator Network and Discriminator Network | [Ian Goodfellow et.al.](https://arxiv.org/abs/1406.2661) |
 | Deep Convolutional GAN (DCGAN) | Generative Adversarial Network with Deep Convolutional Generator and Discriminator Network | [Alec Radford et.al.](https://arxiv.org/abs/1511.06434) |
 | Variational Autoencoder (VAE) | Better performing Autoencoder with a single layer Encoder and Decoder Network | [Kingma et.al.](https://arxiv.org/abs/1312.6114) |
+| Variational Autoencoder + Generative Adversarial Network (VAE/GAN) | A fusion of a VAE with a GAN | [Larsen et.al.](https://arxiv.org/abs/1512.09300) |
 | Wasserstein GAN (WGAN) | Generative Adversarial Network with a different method of training | [Martin Arjovsky et.al.](https://arxiv.org/abs/1701.07875) |
 | &#945; GAN | Generative Adversarial Network combined with an Auto-Encoder and a different training strategy | [Mihaela Rosca and Balaji Lakshminarayanan et.al.](https://arxiv.org/abs/1706.04987) |
-
-#### Broken Implementations
-
-+ Unfortunately, the VAEGAN (Combination of a Variational Auto-Encoder and a Generative Adversarial Network) implementation is not training as expected. It will be available soon. Please view the issue [here](https://github.com/DL-IT/generative_zoo/issues/1)
 
 #### Upcoming Implementations
 
@@ -55,3 +52,5 @@ my_gan.train()
 The parameters passed for the object initialization and the train function is specified in detail in the documentation of the functions themselves and vary from model to model. Please open the Python interpreter in your terminal or your IPython notebook and enter `help(my_gan)` or `help(x.xGAN)`.
 
 *That is it, you have your model ready to test*.
+
+If the above tutorial is unclear, please feel free to clone this repo and make use of the Main template files. Thanks!!
