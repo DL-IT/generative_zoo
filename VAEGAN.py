@@ -7,7 +7,23 @@ import torchvision.utils as tv_utils
 from torch.autograd import Variable as V
 
 class VAEGAN(object):
-	def __init__(self, image_size, n_chan, hiddens, n_z, ngpu):
+	def __init__(self, image_size, n_z, n_chan, hiddens, ngpu):
+		"""
+		VAEGAN object. This class is a wrapper of a VAEGAN as explained in the paper:
+			AUTO-ENCODING BEYOND PIXELS USING A LEARNED SIMILARITY METRIC by Larsen et.al.
+		Instance of this class initializes the parameters required for the Encoder, Decoder and Discriminator.
+		Arguments:
+			image_size		= Height / width of the real images
+			n_z			= Dimensionality of the latent space
+			n_chan			= Number of channels of the real images
+			hiddens			= Number of nodes in the hidden layers of the encoder and decoder
+						  Format:
+						  	hiddens	= {'enc':	n_enc_hidden,
+						  		   'dec':	n_dec_hidden,
+						  		   'dis':	n_dis_hidden
+						  		  }
+			ngpu			= Number of gpus to be allocated, if to be run on GPU
+		"""
 		super(VAEGAN, self).__init__()
 		
 		Gen_net		= Generator(image_size, n_chan, hiddens['enc'], hiddens['dec'], n_z, ngpu)
@@ -20,6 +36,32 @@ class VAEGAN(object):
 		self.n_chan	= n_chan
 		
 	def train(self, dataset, batch_size, n_iters, gamma, optimizer_details, show_period=50, display_images=True, misc_options=['init_scheme', 'save_model']):
+		"""
+		Train function of the VAEGAN class. This starts training the model.
+		Arguments:
+			dataset			= Dataset object as from torchvision loader
+			batch_size		= batch size to be used throughout the training
+			n_iters			= Number of iterations to train for
+			optimizer_details	= Dictionary representing the details for optimizers for the VAEGAN
+						  Format:
+						  	optimizer_details = {'enc':
+						  					{'name'		: Name of optimizer,
+								  			 'learn_rate'	: learning rate,
+								  			 'betas'	: (beta_1, beta_2),	=> Optional, if using Adam/Adamax
+							  			     	 'momentum'	: momentum,	=> Optional, if using momentum SGD/NAG
+							  			     	 'nesterov'	: True/False,	=> Optional, true if using NAG else otherwise
+							  			     	 },
+							  		     'dec':	
+							  		     		<SAME AS ABOVE>
+							  		     'dis':
+							  		     		<SAME AS ABOVE>
+							  		     }
+			show_period	(opt)	= Prints the objective function with current iteration number every show_period iterations
+			display_images	(opt)	= If true, saves the decoded images after encoding every show_period*5 iterations
+			misc_options	(opt)	= List of strings
+						  Add 'init_scheme' to the list, if you want to implement specific initialization schemes.
+						  Add 'save_model' to the list, if you want to save the model after n_iters 
+		"""
 		optimizer_details['enc']['params']	= self.Enc_net.parameters()
 		optimizer_details['dec']['params']	= self.Dec_net.parameters()
 		optimizer_details['dis']['params']	= self.Dis_net.parameters()
