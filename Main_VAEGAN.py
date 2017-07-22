@@ -1,175 +1,66 @@
-import argparse
-import torch as t
-import numpy as np
+# This is a sample main file highlighting the usage of VAEGAN module in VAEGAN.py
+# Please edit this file based on your requirements
+import sys
 import VAEGAN as vg
-import torch.nn as nn
-import torch.utils.data as d_utils
-import torchvision.datasets as dset
-import torchvision.utils as tv_utils
-from torch.autograd import Variable as V
-import torchvision.transforms as transforms
+import data_utilities as d_u
 
-t.manual_seed(29)
+# Dataset
+dset	= sys.argv[1]
+root	= sys.argv[2]
 
-parser	= argparse.ArgumentParser()
-parser.add_argument('--dataset', required=True, help='mnist | cifar10')
-parser.add_argument('--batchsize', type=int, default=100, help='input batch size')
-parser.add_argument('--n_chan', type=int, required=True, help='input number of image channels')
-parser.add_argument('--n_z', type=int, default=128, help='input dimensionality of latent vector')
-parser.add_argument('--img_size', type=int, default=32, help='input the height / width of image')
-parser.add_argument('--n_enc_hidden', type=int, default=64, help='input the number of feature maps in the first layer of encoder')
-parser.add_argument('--n_dec_hidden', type=int, default=256, help='input the number of feature maps in the first layer of decoder')
-parser.add_argument('--n_dis_hidden', type=int, default=128, help='input number of feature maps in the first layer of discriminator')
-parser.add_argument('--max_epochs', type=int, default=20, help='input the maximum number of epochs to run')
-parser.add_argument('--gen_lr', type=float, default=1e-04, help='input the learning rate for the generator')
-parser.add_argument('--dis_lr', type=float, default=1e-04, help='input the learning rate for the discriminator')
-parser.add_argument('--ngpu', type=int, default=0, help='input the number of GPUs required')
-opt	= parser.parse_args()
-print(opt)
+# Arguments passed to dataset loaders can be modified based on required usage. Please look at the documentation of the loader functions using 
+# help(d_u) command.
 
-# Dataset information
-
-if opt.dataset == 'mnist':
-	transformations	= [transforms.Scale(opt.img_size), transforms.ToTensor()]
-	dataset	= dset.MNIST(root='./{0}_data/'.format(opt.dataset), download=True, transform=transforms.Compose(transformations))
-elif opt.dataset == 'cifar10':
-	transformations	= [transforms.Scale(opt.img_size), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
-	dataset = dset.CIFAR10(root='./{0}_data/'.format(opt.dataset), download=True, transform=transforms.Compose(transformations))
+if dset == 'mnist':
+	dataset	= d_u.MNIST_loader(root=root, image_size=32)
+	n_chan	= 1
+elif dset == 'cifar10':
+	dataset	= d_u.CIFAR10_loader(root=root, image_size=32, normalize=True)
+	n_chan	= 3
+elif dset == 'lsun':
+	dataset	= d_u.LSUN_loader(root=root, image_size=32, classes=['bedroom'], normalize=True)
+	n_chan	= 3
 	
-d_loader	= d_utils.DataLoader(dataset, batch_size=opt.batchsize, shuffle=True)
+# VAEGAN object initialization
+# Parameters below can be modified
+# Please check the documentation using help(vg.VAEGAN.__init__)
+image_size	= 32
+n_z		= 128
+hiddens		= {'enc':	64,
+		   'dec':	64,
+		   'dis':	64
+		  }
+ngpu		= 1
 
-# Hyperparameters
+Gen_model	= vg.VAEGAN(image_size=image_size, n_z=n_z, n_chan=n_chan, hiddens=hiddens, ngpu=ngpu)
 
-img_size	= opt.img_size
-n_z		= opt.n_z
-n_chan		= opt.n_chan
-n_enc_hidden	= opt.n_enc_hidden
-n_dec_hidden	= opt.n_dec_hidden
-n_dis_hidden	= opt.n_dis_hidden
-b_size	 	= opt.batchsize
-G_lr		= opt.gen_lr
-D_lr		= opt.dis_lr
-ngpu		= opt.ngpu
+# VAEGAN training scheme
+# Parameters below can be modified based on required usage.
+# Please check the documentation using help(vg.VAEGAN.train) for more details
 
-# Neural_nets
+batch_size	= 100
+n_iters		= 1e05
+gamma		= 1
+opt_dets	= {'enc':	{'name'		: 'adam',
+				 'learn_rate'	: 1e-04,
+				 'betas'	: (0.5, 0.99)
+				},
+		   'dec':	{'name'		: 'sgd',
+		   		 'learn_rate'	: 1e-04,
+		   		 'momentum'	: 0.9,
+		   		 'nesterov'	: True
+		   		},
+		   'dis':	{'name'		: 'rmsprop',
+		   		 'learn_rate'	: 1e-04
+		   		}
+		  }
 
-Enc_net		= vg.Generator(img_size, n_chan, n_enc_hidden, n_dec_hidden, n_z, ngpu).encoder
-Dec_net		= vg.Generator(img_size, n_chan, n_enc_hidden, n_dec_hidden, n_z, ngpu).decoder
-Dis_net		= vg.Discriminator(img_size, n_chan, n_dis_hidden, ngpu)
+# Optional arguments
+show_period	= 50
+display_images	= True
+misc_options	= ['init_scheme', 'save_model']
 
-Enc_net.apply(vg.weight_init_scheme)
-Dec_net.apply(vg.weight_init_scheme)
-Dis_net.apply(vg.weight_init_scheme)
+# Call training
+Gen_model.train(dataset=dataset, batch_size=batch_size, n_iters=n_iters, gamma=gamma, optimizer_details=opt_dets, show_period=show_period, display_images=display_images, misc_options=misc_options)
 
-# Place holders to ensure correct dimensions
-
-inpt		= t.FloatTensor(b_size, n_chan, img_size, img_size)
-noise		= t.FloatTensor(b_size, n_z, 1, 1)
-fixed_noise	= t.randn(b_size, n_z, 1, 1)
-label		= t.FloatTensor(b_size)
-
-# Optimizers and Loss Functions
-
-Enc_optim	= t.optim.RMSprop(Enc_net.parameters(), lr=G_lr)
-Dec_optim	= t.optim.RMSprop(Dec_net.parameters(), lr=G_lr)
-Dis_optim	= t.optim.RMSprop(Dis_net.parameters(), lr=D_lr)
-
-def loss_KLD(terms):
-	means	= terms[0]
-	logcovs	= terms[1]
-	KLD	= (means.clone()).pow(2)
-	KLD	= KLD + (logcovs.clone()).exp_()
-	KLD	= KLD*(-1)
-	KLD	= KLD + 1 + logcovs
-	KLD	= KLD.sum(1)
-	KLD	= KLD*(-0.5)
-	KLD	= KLD.mean()
-	
-	return KLD
-	
-def loss_Recons(terms):
-	x	= terms[0]
-	means	= terms[1]
-
-	rec_ls	= (x - means).clone()
-	rec_ls	= rec_ls.pow(2)
-	rec_ls	= rec_ls + np.log(2*np.pi)
-	rec_ls	= rec_ls*0.5
-	rec_ls	= rec_ls.sum(1)
-	rec_ls	= rec_ls.mean()
-	
-	return rec_ls
-		
-if ngpu > 0:
-	Enc_net.cuda()
-	Dec_net.cuda()
-	Dis_net.cuda()
-	inpt	= inpt.cuda()
-	label	= label.cuda()
-	noise	= noise.cuda()
-	fixed_noise	= fixed_noise.cuda()
-
-gen_iterations	= 0
-for epoch in range(0, opt.max_epochs):
-	for i, itr in enumerate(d_loader):
-		
-		Enc_net.zero_grad()
-		Dec_net.zero_grad()
-		Dis_net.zero_grad()
-		
-		# Analogies
-		# 1. X 		-> X ==> mini-batch from dataset
-		# 2. noise 	-> Z_p ==> random noise from multi-variate Gaussian with 0 mean and I covariance
-		# 3. X_recns	-> \tilde{X} ==> Reconstructed X 
-		# 4. X_p	-> X_p ==> generated images from Z_p
-		# 5. L_prior	-> L_{prior} ==> Kullback-Leibler Divergence
-		# 6. L_disll	-> L^{Dis_{l}}_{llike} ==> Style term
-		# 7. L_gan	-> L_{GAN} ==> GAN loss
-
-		X, _	= itr
-		inpt.copy_(X)
-		inptv	= V(inpt)
-		label.fill_(1)
-		labels	= V(label)
-		
-		noise.copy_(t.randn(b_size, n_z, 1, 1))
-		noisev	= V(noise)
-		
-		outputs	= Enc_net(inptv)
-		
-		L_prior	= loss_KLD(outputs)
-		X_recns	= Dec_net(vg.Parameterizer(outputs, ngpu))
-		
-		(Dis_real, Dis_real_lth)	= Dis_net(inptv)
-		(Dis_recns, Dis_recns_lth)	= Dis_net(X_recns)
-
-		L_disll	= loss_Recons([Dis_real_lth, Dis_recns_lth])
-		
-		X_p		= Dec_net(noisev)
-		Dis_X_p, _	= Dis_net(X_p)
-		
-		L_gan	= (t.log(Dis_real) + t.log(1 - Dis_recns + 1e-08) + t.log(1 - Dis_X_p + 1e-08)).mean()
-		
-		L_enc	= L_prior + L_disll
-		L_dec	= L_disll - L_gan
-		L_dis	= L_gan
-		L_enc.backward(retain_variables=True)
-		L_dec.backward(retain_variables=True)
-		L_dis.backward()
-		
-		Enc_optim.step()
-		Dec_optim.step()
-		Dis_optim.step()
-		
-		gen_iterations	= gen_iterations + 1
-		
-#		if gen_iterations % 10 == 1:
-		print('[{0}/{1}][{2}/{3}]\tL_prior: {4}\tL_disll: {5}\tL_gan: {6}'.format(epoch, opt.max_epochs, i, len(d_loader), round(L_prior.data[0], 5), round(L_disll.data[0], 5), round(L_gan.data[0], 5)))
-				
-		if gen_iterations % 200 == 0:
-			fake	= Dec_net(V(fixed_noise))
-			tv_utils.save_image(fake.data, 'fake_samples_from_noise-iteration={0}.png'.format(gen_iterations))
-		
-	tv_utils.save_image(X, 'real_samples.png')
-	recon_imgs	= Dec_net(vg.Parameterizer(Enc_net(inptv), ngpu))
-	tv_utils.save_image(recon_imgs.data, 'reconstructed_samples_{0}.png'.format(epoch))
+# Voila, your work is done
