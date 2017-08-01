@@ -106,7 +106,8 @@ class DCGAN(object):
 				# Training with reals. These are obviously true in the discriminator's POV
 				X, _	= itr
 				if inpt.size() != X.size():
-					inpt.resize_as_(X)
+					inpt.resize_(X.size(0), X.size(1), X.size(2), X.size(3))
+					label.resize_(X.size(0))
 				inpt.copy_(X)
 				label.fill_(1)
 				
@@ -122,6 +123,7 @@ class DCGAN(object):
 				# We want same amount of fake data as real data
 				if noise.size(0) != inpt.size(0):
 					noise.resize_(inpt.size(0), noise.size(1), noise.size(2), noise.size(3))
+					label.resize_(X.size(0))
 				noise.normal_(0, 1)
 				label.fill_(0)
 				
@@ -137,11 +139,6 @@ class DCGAN(object):
 				
 				# Training the generator
 				# We don't want to evaluate the gradients for the Discriminator during Generator training
-				for params in self.Dis_net.parameters():
-					params.requires_grad	= False
-				
-				for params in self.Gen_net.parameters():
-					params.requires_grad	= True
 					
 				self.Gen_net.zero_grad()
 				# The fake are reals in the Generator's POV
@@ -164,8 +161,9 @@ class DCGAN(object):
 					if gen_iters % (show_period*5) == 0:
 						gen_imgs	= self.Gen_net(V(fixed_noise))
 						
-						# Normalizing the images to look better
-						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
+						# DeNormalizing the images to look better
+						if self.n_chan > 1:
+							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
 						tv_utils.save_image(gen_imgs.data, 'DCGAN_Generated_images@iteration={0}.png'.format(gen_iters))
 
 				if gen_iters == n_iters:
