@@ -1,6 +1,9 @@
 import torch as t
 import numpy as np
+import utilities as u
 import torch.nn as nn
+import torch.utils.data as d_utils
+import torchvision.utils as tv_utils
 from torch.autograd import Variable as V
 
 class VAE(object):
@@ -26,8 +29,10 @@ class VAE(object):
 		self.vae_net	= vae(image_size, n_z, n_chan, hiddens['enc'], hiddens['dec'], ngpu)
 		self.ngpu	= ngpu
 		self.n_z	= n_z
+		self.image_size	= image_size
+		self.n_chan	= n_chan
 		if 'BCE' in loss:
-			self.recons_loss	= nn.BCELoss()
+			self.recons_loss	= nn.BCELoss(size_average=False)
 		elif 'MSE' in loss:
 			self.recons_loss	= nn.MSELoss()
 		self.KLD_loss			= u.KLD
@@ -56,7 +61,7 @@ class VAE(object):
 		optimizer_details['params']	= self.vae_net.parameters()
 		optmzr		= u.get_optimizer_with_params(optimizer_details)
 		
-		inpt	= t.FloatTensor(batch_size, dataset.size(1), dataset.size(2), dataset.size(3))
+		inpt	= t.FloatTensor(batch_size, self.n_chan, self.image_size, self.image_size)
 		if 'init_scheme' in misc_options:
 			self.vae_net.apply(u.weight_init_scheme)
 			
@@ -77,14 +82,16 @@ class VAE(object):
 		while not flag:
 			for i, itr in enumerate(d_loader):
 				
+				self.vae_net.zero_grad()
+				
 				X, _ = itr
 				if inpt.size() != X.size():
-					inpt.resize_as_(X)
+					inpt.resize_(X.size(0), X.size(1), X.size(2), X.size(3))
 				inpt.copy_(X)
 				
 				inptV	= V(inpt)
 				rec_img, means, logcovs	= self.vae_net(inptV)
-				obj_fn	= self.recons_loss(rec_img, inptV) + self.KLD_loss(means, logcovs)
+				obj_fn	= self.recons_loss(rec_img, inptV) + self.KLD_loss([means, logcovs])
 				obj_fn.backward()
 				optmzr.step()
 				
@@ -92,25 +99,31 @@ class VAE(object):
 
 				# Showing the Progress every show_period iterations
 				if iters % show_period == 0:
-					print('[{0}/{1}]\tObjective Function:\t{2}'.format(gen_iters, n_iters, obj_fn.data[0]))
+					print('[{0}/{1}]\tObjective Function:\t{2}'.format(iters, n_iters, obj_fn.data[0]))
 					
 				# Saving the reconstructed images every show period*5 iterations
 				if display_images == True:
 					if iters % (show_period*5) == 0:
 						# Normalizing the images to look better
-						rec_img.data	= rec_img.data.mul(0.5).add(0.5)
-						tv_utils.save_image(rec_img.data, 'Reconstructed_images@iteration={0}.png'.format(iters))
+						if self.n_chan > 1:
+							rec_img.data	= rec_img.data.mul(0.5).add(0.5)
+						rec_img	= rec_img.view(-1, self.n_chan, self.image_size, self.image_size)
+						tv_utils.save_image(rec_img.data, 'VAE_Reconstructed_images@iteration={0}.png'.format(iters))
 						
 				if iters == n_iters:
 					flag	= True
 					break
 					
 			if 'save_model' in misc_options and flag == True:
-				torch.save(self.vae_net.state_dict(), 'VAE_net_trained_model.pth')
+				t.save(self.vae_net.state_dict(), 'VAE_net_trained_model.pth')
+				print('Training over and model(s) saved')
+			
+			elif flag == True:
+				print('Training is over')
 			
 class vae(nn.Module):
 	def __init__(self, image_size, n_z, n_chan, n_enc_hidden, n_dec_hidden, ngpu):
-		super(var_auto_encoder, self).__init__()
+		super(vae, self).__init__()
 		n_input		= n_chan*image_size*image_size
 		self.enc_w_1	= nn.Linear(n_input, n_enc_hidden)
 		self.enc_w_m	= nn.Linear(n_enc_hidden, n_z)
@@ -161,7 +174,6 @@ class vae(nn.Module):
 			pass_2	= self.dec_act_1(pass_1)
 			pass_3	= self.dec_w_2(pass_2)
 			pass_4	= self.dec_act_2(pass_3)
-			pass_4	= pass_4.view(-1, self.n_chan, self.image_size, self.image_size)
 
 		return pass_4
 

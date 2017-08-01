@@ -25,7 +25,7 @@ class MLPGAN(object):
 						  		   'dis': n_dis_depth
 						  		  }
 			ngpu			= Number of gpus to allocated, if to be run on gpu
-			loss			= The loss function to be used
+			loss (opt)		= The loss function to be used. Default is BCE loss
 		"""
 		super(MLPGAN, self).__init__()
 		self.Gen_net	= Generator(image_size, n_z, n_chan, hiddens['gen'], depths['gen'], ngpu)
@@ -105,18 +105,12 @@ class MLPGAN(object):
 				
 				# Training the discriminator
 				# We don't want to evaluate the gradients for the Generator during Discriminator training
-				for params in self.Gen_net.parameters():
-					params.requires_grad	= False
-					
-				for params in self.Dis_net.parameters():
-					params.requires_grad	= True
-				
 				self.Dis_net.zero_grad()
 
 				# Training with reals. These are obviously true in the discriminator's POV
 				X, _	= itr
 				if inpt.size() != X.size():
-					inpt.resize_as_(X)
+					inpt.resize_(X.size(0), X.size(1), X.size(2), X.size(3))
 				inpt.copy_(X)
 				label.fill_(1)
 				
@@ -125,6 +119,7 @@ class MLPGAN(object):
 				
 				otpt	= self.Dis_net(inptV)
 				err_D_r	= self.loss(otpt, labelV)
+				err_D_r.backward()
 				
 				# Training with fakes. These are false in the discriminator's POV
 					
@@ -137,28 +132,21 @@ class MLPGAN(object):
 				noiseV	= V(noise)
 				labelV	= V(label)
 				
-				X_f	= self.Gen_net(noiseV)
+				X_f	= self.Gen_net(noiseV.detach())
 				otpt	= self.Dis_net(X_f)
 				err_D_f	= self.loss(otpt, labelV)
+				err_D_f.backward()
 				err_D	= err_D_r + err_D_f
-				err_D.backward()
 				D_optmzr.step()
 				
 				# Training the generator
 				# We don't want to evaluate the gradients for the Discriminator during Generator training
-				for params in self.Dis_net.parameters():
-					params.requires_grad	= False
-				
-				for params in self.Gen_net.parameters():
-					params.requires_grad	= True
 					
 				self.Gen_net.zero_grad()
 					
 				# The fake are reals in the Generator's POV
-				noise.normal_(0, 1)
 				label.fill_(1)
 				
-				noiseV	= V(noise)
 				labelV	= V(label)
 				
 				X_gen	= self.Gen_net(noiseV)
@@ -179,7 +167,8 @@ class MLPGAN(object):
 						gen_imgs	= self.Gen_net(V(fixed_noise))
 						
 						# Normalizing the images to look better
-						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
+						if self.n_chan > 1:
+							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
 						tv_utils.save_image(gen_imgs.data, 'Generated_images@iteration={0}.png'.format(gen_iters))
 
 				if gen_iters == n_iters:
@@ -187,9 +176,12 @@ class MLPGAN(object):
 					break
 					
 		if 'save_model' in misc_options and flag == True:
-			torch.save(self.Gen_net.state_dict(), 'MLPGAN_Gen_net_trained_model.pth')
-			torch.save(self.Dis_net.state_dict(), 'MLPGAN_Dis_net_trained_model.pth')
-		print('Training over and model(s) saved')
+			t.save(self.Gen_net.state_dict(), 'MLPGAN_Gen_net_trained_model.pth')
+			t.save(self.Dis_net.state_dict(), 'MLPGAN_Dis_net_trained_model.pth')
+			print('Training over and model(s) saved')
+			
+		elif flag == True:
+			print('Training is over')
 
 # Generator net
 

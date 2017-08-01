@@ -48,13 +48,12 @@ def weight_init_scheme(mdl):
 		mdl.weight.data.normal_(1.0, 0.02)
 		mdl.bias.data.fill_(0)
 		
-def KLD(means, logcovs):
-	l	= means.pow(2)
-	l	= l + logcovs.exp()
-	l	= l*(-1)
-	l 	= l + 1 + logcovs
-	l	= (t.sum(l))*(-0.5)
-	return l
+def KLD(means_and_logcovs):
+	means	= means_and_logcovs[0]
+	logcovs	= means_and_logcovs[1]
+	kld	= means.pow(2).add_(logcovs.exp()).mul(-1).add_(logcovs).add_(1)
+	kld	= t.sum(kld).mul_(-0.5)
+	return kld
 	
 def de_sigmoid(tensor):
 	pass_	= tensor

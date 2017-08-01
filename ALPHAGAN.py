@@ -174,7 +174,8 @@ class ALPHAGAN(object):
 						gen_imgs	= self.Gen_net(V(fixed_noise).detach())
 						
 						# Normalizing the images to look better
-						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
+						if self.n_chan > 1:
+							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
 						tv_utils.save_image(gen_imgs.data, 'ALPHAGAN_Generated_images@iteration={0}.png'.format(gen_iters))
 						
 						if self.n_chan > 1:
