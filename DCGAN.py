@@ -21,7 +21,7 @@ class DCGAN(object):
 						  	hiddens = {'gen': n_gen_hidden, 
 						  		   'dis': n_dis_hidden
 						  		  }
-			ngpu			= Number of gpus to allocated, if to be run on gpu
+			ngpu			= Number of gpus to be allocated, if to be run on gpu
 			loss			= The loss function to be used
 		"""
 		super(DCGAN, self).__init__()
@@ -102,12 +102,6 @@ class DCGAN(object):
 				
 				# Training the discriminator
 				# We don't want to evaluate the gradients for the Generator during Discriminator training
-				for params in self.Gen_net.parameters():
-					params.requires_grad	= False
-				
-				for params in self.Dis_net.parameters():
-					params.requires_grad	= True
-
 				self.Dis_net.zero_grad()
 				# Training with reals. These are obviously true in the discriminator's POV
 				X, _	= itr
@@ -121,6 +115,7 @@ class DCGAN(object):
 				
 				otpt	= self.Dis_net(inptV)
 				err_D_r	= self.loss(otpt, labelV)
+				err_D_r.backward()
 				
 				# Training with fakes. These are false in the discriminator's POV
 					
@@ -134,10 +129,10 @@ class DCGAN(object):
 				labelV	= V(label)
 				
 				X_f	= self.Gen_net(noiseV)
-				otpt	= self.Dis_net(X_f)
+				otpt	= self.Dis_net(X_f.detach())
 				err_D_f	= self.loss(otpt, labelV)
+				err_D_f.backward()
 				err_D	= err_D_r + err_D_f
-				err_D.backward()
 				D_optmzr.step()
 				
 				# Training the generator
@@ -150,14 +145,10 @@ class DCGAN(object):
 					
 				self.Gen_net.zero_grad()
 				# The fake are reals in the Generator's POV
-				noise.normal_(0, 1)
 				label.fill_(1)
-				
-				noiseV	= V(noise)
 				labelV	= V(label)
 				
-				X_gen	= self.Gen_net(noiseV)
-				otpt	= self.Dis_net(X_gen)
+				otpt	= self.Dis_net(X_f)
 				err_G	= self.loss(otpt, labelV)
 				err_G.backward()
 				G_optmzr.step()
@@ -175,16 +166,19 @@ class DCGAN(object):
 						
 						# Normalizing the images to look better
 						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
-						tv_utils.save_image(gen_imgs.data, 'Generated_images@iteration={0}.png'.format(gen_iters))
+						tv_utils.save_image(gen_imgs.data, 'DCGAN_Generated_images@iteration={0}.png'.format(gen_iters))
 
 				if gen_iters == n_iters:
 					flag	= True
 					break
 					
 		if 'save_model' in misc_options and flag == True:
-			torch.save(self.Gen_net.state_dict(), 'DCGAN_Gen_net_trained_model.pth')
-			torch.save(self.Dis_net.state_dict(), 'DCGAN_Dis_net_trained_model.pth')
-		print('Training over and model(s) saved')
+			t.save(self.Gen_net.state_dict(), 'DCGAN_Gen_net_trained_model.pth')
+			t.save(self.Dis_net.state_dict(), 'DCGAN_Dis_net_trained_model.pth')
+			print('Training over and model(s) saved')
+			
+		elif flag == True:
+			print('Training is over')
 				
 # Generator net
 

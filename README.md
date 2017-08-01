@@ -9,9 +9,12 @@ generative_zoo is a repository that provides working implementations of some gen
 | Multilayer Perceptron GAN (MLPGAN) | Generative Adversarial Network with MLP Generator Network and Discriminator Network | [Ian Goodfellow et.al.](https://arxiv.org/abs/1406.2661) |
 | Deep Convolutional GAN (DCGAN) | Generative Adversarial Network with Deep Convolutional Generator and Discriminator Network | [Alec Radford et.al.](https://arxiv.org/abs/1511.06434) |
 | Variational Autoencoder (VAE) | Better performing Autoencoder with a single layer Encoder and Decoder Network | [Kingma et.al.](https://arxiv.org/abs/1312.6114) |
-| Variational Autoencoder + Generative Adversarial Network (VAE/GAN) | A fusion of a VAE with a GAN | [Larsen et.al.](https://arxiv.org/abs/1512.09300) |
 | Wasserstein GAN (WGAN) | Generative Adversarial Network with a different method of training | [Martin Arjovsky et.al.](https://arxiv.org/abs/1701.07875) |
 | &#945; GAN | Generative Adversarial Network combined with an Auto-Encoder and a different training strategy | [Mihaela Rosca and Balaji Lakshminarayanan et.al.](https://arxiv.org/abs/1706.04987) |
+
+### Broken Implementations
+
++ The code for VAEGAN does not generate good images. If you would like to contribute to the repo, please help solve this [issue](https://github.com/DL-IT/generative_zoo/issues/1). Thanks!!
 
 #### Upcoming Implementations
 

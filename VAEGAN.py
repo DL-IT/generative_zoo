@@ -108,7 +108,7 @@ class VAEGAN(object):
 				
 				X, _	= itr
 				if inpt.size() != X.size():
-					inpt.resize_as_(X)
+					inpt.resize_(X.size(0), X.size(1), X.size(2), X.size(3))
 				inpt.copy_(X)
 				
 				inptV	= V(inpt)
@@ -129,7 +129,7 @@ class VAEGAN(object):
 				
 				# Assemble the losses
 				L_prior	= u.KLD(m_and_logcovs)
-				L_disll	= loss_Recns(Dis_real_lth, Dis_recns_lth)
+				L_disll	= Recons_loss(Dis_real_lth, Dis_recns_lth)
 				L_gan	= (t.log(Dis_real) + t.log(1 - Dis_recns) + t.log(1 - Dis_gen)).sum().mul(-1)
 				
 				# Assemble the losses per net
@@ -150,7 +150,7 @@ class VAEGAN(object):
 
 				# Showing the Progress every show_period iterations
 				if gen_iters % show_period == 0:
-					print('[{0}/{1}]\tEncoder Error:\t{2}\tDecoder Error:\t{3}\tDiscriminator Error:\t{4}'.format(gen_iters, n_iters, L_enc.data[0], L_dec.data[0], L_dis.data[0]))
+					print('[{0}/{1}]\tEncoder Error:\t{2}\tDecoder Error:\t{3}\tDiscriminator Error:\t{4}'.format(gen_iters, n_iters, round(L_enc.data[0], 5), round(L_dec.data[0], 5), round(L_dis.data[0], 5)))
 					
 				# Saving the generated images every show_period*5 iterations
 				if display_images == True:
@@ -158,10 +158,11 @@ class VAEGAN(object):
 						gen_imgs	= self.Dec_net(V(fixed_noise))
 						
 						# Normalizing the images to look better
-						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
-						X_recns.data	= X_recns.data.mul(0.5).add(0.5)
-						tv_utils.save_image(gen_imgs.data, 'Generated_images@iteration={0}.png'.format(gen_iters))
-						tv_utils.save_image(X_recns.data, 'Reconstructed_images@iteration={0}.png'.format(gen_iters))
+						if self.n_chan > 1:
+							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
+							X_recns.data	= X_recns.data.mul(0.5).add(0.5)
+						tv_utils.save_image(gen_imgs.data, 'VAEGAN_Generated_images@iteration={0}.png'.format(gen_iters))
+						tv_utils.save_image(X_recns.data, 'VAEGAN_Reconstructed_images@iteration={0}.png'.format(gen_iters))
 
 				if gen_iters == n_iters:
 					flag	= True
