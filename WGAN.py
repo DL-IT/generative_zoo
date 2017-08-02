@@ -88,6 +88,8 @@ class WGAN(object):
 		
 		inpt	= t.FloatTensor(batch_size, self.n_chan, self.image_size, self.image_size)
 		noise	= t.FloatTensor(batch_size, self.n_z, 1, 1)
+		pos	= t.FloatTensor([1])
+		neg	= pos.mul(-1)
 		
 		if display_images == True:
 			fixed_noise	= t.randn(batch_size, self.n_z, 1, 1)
@@ -99,6 +101,8 @@ class WGAN(object):
 		if self.ngpu > 0:
 			inpt	= inpt.cuda()
 			noise	= noise.cuda()
+			pos	= pos.cuda()
+			neg	= neg.cuda()
 			if display_images == True:
 				fixed_noise	= fixed_noise.cuda()
 				
@@ -148,6 +152,7 @@ class WGAN(object):
 					otpt	= self.Dis_net(inptV)
 					otpt	= u.de_sigmoid(otpt)
 					err_D_r	= (otpt.mean(0)).view(1)
+					err_D_r.backward(pos)
 					
 					# Training with fakes. These are false in the discriminator's POV
 					
@@ -160,9 +165,8 @@ class WGAN(object):
 					otpt	= self.Dis_net(X_f)
 					otpt	= u.de_sigmoid(otpt)
 					err_D_f	= (otpt.mean(0)).view(1)
-					
+					err_D_f.backward(neg)
 					err_D	= err_D_r - err_D_f
-					err_D.backward()
 					D_optmzr.step()
 					j	= j + 1
 					
@@ -189,7 +193,7 @@ class WGAN(object):
 
 				# Showing the Progress every show_period iterations
 				if gen_iters % show_period == 0:
-					print('[{0}/{1}]\tDiscriminator Error:\t{2}\tGenerator Error:\t{3}'.format(gen_iters, n_iters, err_D.data[0], err_G.data[0]))
+					print('[{0}/{1}]\tDiscriminator Error:\t{2}\tGenerator Error:\t{3}'.format(gen_iters, n_iters, round(err_D.data[0], 5), round(err_G.data[0], 5)))
 					
 				# Saving the generated images every show_period*5 iterations
 				if display_images == True:

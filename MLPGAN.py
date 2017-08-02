@@ -159,7 +159,7 @@ class MLPGAN(object):
 				
 				# Showing the Progress every show_period iterations
 				if gen_iters % show_period == 0:
-					print('[{0}/{1}]\tDiscriminator Error:\t{2}\tGenerator Error:\t{3}'.format(gen_iters, n_iters, err_D.data[0], err_G.data[0]))
+					print('[{0}/{1}]\tDiscriminator Error:\t{2}\tGenerator Error:\t{3}'.format(gen_iters, n_iters, round(err_D.data[0], 5), round(err_G.data[0], 5)))
 					
 				# Saving the generated images every show_period*5 iterations
 				if display_images == True:

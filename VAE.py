@@ -99,7 +99,7 @@ class VAE(object):
 
 				# Showing the Progress every show_period iterations
 				if iters % show_period == 0:
-					print('[{0}/{1}]\tObjective Function:\t{2}'.format(iters, n_iters, obj_fn.data[0]))
+					print('[{0}/{1}]\tObjective Function:\t{2}'.format(iters, n_iters, round(obj_fn.data[0], 5)))
 					
 				# Saving the reconstructed images every show period*5 iterations
 				if display_images == True:
