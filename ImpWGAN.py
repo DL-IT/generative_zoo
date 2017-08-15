@@ -77,4 +77,167 @@ class ImpWGAN(object):
 						  Add 'init_scheme' to the list, if you want to implement specific initialization schemes
 						  Add 'save_model' to the list, if you want to save the model after n_iters iterations of training
 		"""
-		raise NotImplementedError
+		optimizer_details['gen']['params']	= self.Gen_net.parameters()
+		optimizer_details['dis']['params']	= self.Dis_net.parameters()
+		G_optmzr	= u.get_optimizer_with_params(optimizer_details['gen'])
+		D_optmzr	= u.get_optimizer_with_params(optimizer_details['dis'])
+		
+		inpt	= t.FloatTensor(batch_size, self.n_chan, self.image_size, self.image_size)
+		noise	= t.FloatTensor(batch_siz,e self.n_z, 1, 1)
+		pos	= t.FloatTensor([1])
+		neg	= pos.mul(-1)
+		
+		if display_images == True:
+			fixed_noise	= t.randn(batch_size, self.n_z, 1, 1)
+			
+		if 'init_scheme' is misc_options:
+			self.Gen_net.apply(u.weight_init_scheme)
+			self.Dis_net.apply(u.weight_init_scheme)
+			
+		if self.ngpu > 0:
+			inpt	= inpt.cuda()
+			noise	= noise.cuda()
+			pos	= pos.cuda()
+			neg	= neg.cuda()
+			if display_images == True:
+				fixed_noise	= fixed_noise.cuda()
+				
+			self.Gen_net	= self.Gen_net.cuda()
+			self.Dis_net	= self.Dis_net.cuda()
+			
+		d_loader	= d_utils.DataLoader(dataset, batch_size, shuffle=True)
+		
+		# Train loop
+		# Details to be followed:
+		# 1. Train the discriminator first for dis_iters_per_gen_iter times. Train the discriminator with reals, then fakes and then evaluate the gradient penalty term also
+		# 2. Train the generator after training the discriminator
+		
+		gen_iters	= 0
+		flag		= False
+		print('Training has started')
+		while not flag:
+			d_iter	= iter(d_loader)
+			i	= 0
+			while i < len(d_loader):
+				
+				# Training the discriminator
+				# We don't want to evaluate the gradients for the Generator during Discriminator training
+				for params in self.Gen_net.parameters():
+					params.requires_grad	= False
+				
+				for params in self.Dis_net.parameters():
+					params.requires_grad	= True				
+									
+				j	= 0
+				# Train the discriminator dis_iters_per_gen_iter times
+				while j < dis_iters_per_gen_iter and i < len(d_loader):
+					self.Dis_net.zero_grad()
+					cur_data	= d_iter.next()
+					i		= i + 1
+					
+					# Training with reals. These are obviously True in the discriminator's POV
+					X, _	= cur_data
+					if inpt.size() != X.size():
+						inpt.resize_(X.size(0), X.size(1), X.size(2), X.size(3))
+					inpt.copy_(X)
+					inptV	= V(inpt)
+					
+					otpt	= self.Dis_net(inptV)
+					otpt	= u.de_sigmoid(otpt)
+					err_D_r	= (otpt.mean(0)).view(1)
+					err_D_r.backward(neg)
+					
+					# Training with fakes. These are false in the discriminator's POV
+					
+					# We want same amount of fake data as real data
+					if noise.size(0) != inpt.size(0):
+						noise.resize_(inpt.size(0), noise.size(1), noise.size(2), noise.size(3))
+					noise.normal_(0, 1)
+					noiseV	= V(noise)
+					X_f	= self.Gen_net(noiseV)
+					otpt	= self.Dis_net(X_f)
+					otpt	= u.de_sigmoid(otpt)
+					err_D_f	= (otpt.mean(0)).view(1)
+					err_D_f.backward(pos)
+					
+					gradient_penalty	= get_grad_pen(X, X_f.data, lmbda)
+					gradient_penalty.backward()
+					
+					err_D	= err_D_r - err_D_f
+					D_optmzr.step()
+					j	= j + 1
+					
+				# Training the generator
+				# We don't want to evaluate the gradients for the Discriminator during Generator training
+				for params in self.Dis_net.parameters():
+					params.requires_grad	= False
+					
+				for params in self.Gen_net.parameters():
+					params.requires_grad	= True
+					
+				self.Gen_net.zero_grad()
+				# The fake are real in the Generator's POV
+				noise.normal_(0, 1)
+				noiseV	= V(noise)
+				X_gen	= self.Gen_net(noiseV)
+				otpt	= self.Dis_net(X_gen)
+				otpt	= u.de_sigmoid(otpt)
+				err_G	= (otpt.mean(0)).view(1)
+				err_G.backward(neg)
+				G_optmzr.step()
+				
+				gen_iters	= gen_iters + 1
+				
+				# Showing the Progress every show_period iterations
+				if gen_iters % show_period == 0:
+					print('[{0}/{1}]\tDiscriminator Error:\t{2}\tGenerator Error:\t{3}'.format(gen_iters, n_iters, round(err_D.data[0], 5), round(err_G.data[0], 5)))
+
+				# Saving the generated images every show_period*5 iterations
+				if display_images == True:
+					if gen_iters % (show_period*5) == 0:
+						gen_imgs	= self.Gen_net(V(fixed_noise))
+						
+						# Normalizing the images to look better
+						if self.n_chan > 1:
+							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
+						tv_utils.save_image(gen_imgs.data, 'WGAN_Generated_images@iteration={0}.png'.format(gen_iters))
+
+				if gen_iters == n_iters:
+					flag	= True
+					break
+				
+		if 'save_model' in misc_options and flag == True:
+			t.save(self.Gen_net.state_dict(), 'ImpWGAN_Gen_net_trained_model.pth')
+			t.save(self.Dis_net.state_dict(), 'ImpWGAN_Dis_net_trained_model.pth')
+			print('Training over and model(s) saved')
+
+		elif flag == True:
+			print('Training is over')
+			
+	def get_grad_pen(self, real_data, fake_data, lmbda):
+		"""
+		Implicit function to calculate the gradient penalty term
+		Arguments:
+			real_data	= The actual x
+			fake_data	= The fake x generated using the generator
+			lmbda		= The lambda parameter value
+		"""
+		epsilon	= t.FloatTensor(real_data.size(1), real_data.size(2), real_data.size(3)).uniform_(0, 1)
+		interpolated_data	= real_data.mul(epsilon) + fake_data.mul(epsilon.mul(-1).add_(1))
+		interpolated_dataV	= V(interpolated_data, requires_grad=True)
+		
+		for params in self.Dis_net.parameters():
+			params.requires_grad	= False
+			
+		grad_outputs	= t.ones(interpolated_dataV.size())
+		if self.ngpu > 0:
+			grad_outputs	= grad_outputs.cuda()
+			
+		gradients	= t.autograd.grad(outputs=u.de_sigmoid(self.Dis_net(interpolated_dataV)).mean(0).view(1), inputs=interpolated_dataV, grad_outputs=grad_outputs, create_graph=True, retain_graph=True, only_inputs=True)[0]
+		
+		grad_pen	= ((gradients.norm(2, dim=1) - 1)**2).mean().mul(lmbda)
+		
+		for params in self.Dis_net.parameters():
+			params.requires_grad	= True
+			
+		return grad_pen
