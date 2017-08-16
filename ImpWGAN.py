@@ -228,12 +228,8 @@ class ImpWGAN(object):
 		
 		for params in self.Dis_net.parameters():
 			params.requires_grad	= False
-			
-		grad_outputs	= t.ones(interpolated_dataV.size())
-		if self.ngpu > 0:
-			grad_outputs	= grad_outputs.cuda()
-			
-		gradients	= t.autograd.grad(outputs=u.de_sigmoid(self.Dis_net(interpolated_dataV)).mean(0).view(1), inputs=interpolated_dataV, grad_outputs=grad_outputs, create_graph=True, retain_graph=True, only_inputs=True)[0]
+					
+		gradients	= t.autograd.grad(outputs=u.de_sigmoid(self.Dis_net(interpolated_dataV)).mean(0).view(1), inputs=interpolated_dataV, only_inputs=True)[0]
 		
 		grad_pen	= ((gradients.norm(2, dim=1) - 1)**2).mean().mul(lmbda)
 		
