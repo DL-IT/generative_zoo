@@ -83,7 +83,7 @@ class ImpWGAN(object):
 		D_optmzr	= u.get_optimizer_with_params(optimizer_details['dis'])
 		
 		inpt	= t.FloatTensor(batch_size, self.n_chan, self.image_size, self.image_size)
-		noise	= t.FloatTensor(batch_siz,e self.n_z, 1, 1)
+		noise	= t.FloatTensor(batch_size, self.n_z, 1, 1)
 		pos	= t.FloatTensor([1])
 		neg	= pos.mul(-1)
 		
@@ -159,9 +159,23 @@ class ImpWGAN(object):
 					otpt	= u.de_sigmoid(otpt)
 					err_D_f	= (otpt.mean(0)).view(1)
 					err_D_f.backward(pos)
+								
+					# Getting the gradient penalty term
+					epsilon	= t.FloatTensor(X.size(1), X.size(2), X.size(3)).uniform_(0, 1)
+					epsilon = epsilon.expand_as(X)
 					
-					gradient_penalty	= get_grad_pen(X, X_f.data, lmbda)
-					gradient_penalty.backward()
+					# The interpolate between real and fake is X_hat.
+					X_hat	= epsilon*X + (1 - epsilon)*X_f.cpu().data
+					if self.ngpu > 0:
+						X_hat	= X_hat.cuda()
+					X_hatV	= V(X_hat, requires_grad=True)
+					otpt	= self.Dis_net(X_hatV)
+					otpt	= u.de_sigmoid(otpt)
+					
+					gradients	= t.autograd.grad(outputs=otpt.mean(0).view(1), inputs=X_hatV, create_graph=True, retain_graph=True, only_inputs=True)[0]
+					grad_pen	= (gradients.norm(2, dim=1) - 1).pow(2).mean().mul(lmbda)
+					grad_pen.backward()
+					print('checkpoint')
 					
 					err_D	= err_D_r - err_D_f
 					D_optmzr.step()
@@ -213,27 +227,3 @@ class ImpWGAN(object):
 
 		elif flag == True:
 			print('Training is over')
-			
-	def get_grad_pen(self, real_data, fake_data, lmbda):
-		"""
-		Implicit function to calculate the gradient penalty term
-		Arguments:
-			real_data	= The actual x
-			fake_data	= The fake x generated using the generator
-			lmbda		= The lambda parameter value
-		"""
-		epsilon	= t.FloatTensor(real_data.size(1), real_data.size(2), real_data.size(3)).uniform_(0, 1)
-		interpolated_data	= real_data.mul(epsilon) + fake_data.mul(epsilon.mul(-1).add_(1))
-		interpolated_dataV	= V(interpolated_data, requires_grad=True)
-		
-		for params in self.Dis_net.parameters():
-			params.requires_grad	= False
-					
-		gradients	= t.autograd.grad(outputs=u.de_sigmoid(self.Dis_net(interpolated_dataV)).mean(0).view(1), inputs=interpolated_dataV, only_inputs=True)[0]
-		
-		grad_pen	= ((gradients.norm(2, dim=1) - 1)**2).mean().mul(lmbda)
-		
-		for params in self.Dis_net.parameters():
-			params.requires_grad	= True
-			
-		return grad_pen
