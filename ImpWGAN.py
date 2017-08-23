@@ -159,27 +159,17 @@ class ImpWGAN(object):
 					otpt	= u.de_sigmoid(otpt)
 					err_D_f	= (otpt.mean(0)).view(1)
 					err_D_f.backward(pos)
-								
-					# Getting the gradient penalty term
-					epsilon	= t.FloatTensor(X.size(1), X.size(2), X.size(3)).uniform_(0, 1)
-					epsilon = epsilon.expand_as(X)
-					
-					# The interpolate between real and fake is X_hat.
-					X_hat	= epsilon*X + (1 - epsilon)*X_f.cpu().data
-					if self.ngpu > 0:
-						X_hat	= X_hat.cuda()
-					X_hatV	= V(X_hat, requires_grad=True)
-					otpt	= self.Dis_net(X_hatV)
-					otpt	= u.de_sigmoid(otpt)
-					
-					gradients	= t.autograd.grad(outputs=otpt.mean(0).view(1), inputs=X_hatV, create_graph=True, retain_graph=True, only_inputs=True)[0]
-					grad_pen	= (gradients.norm(2, dim=1) - 1).pow(2).mean().mul(lmbda)
-					grad_pen.backward()
-					print('checkpoint')
-					
 					err_D	= err_D_r - err_D_f
+					
+					grad_pen	= calc_grad_pen(self.Dis_net, X, X_f.cpu().data, lmbda, self.ngpu)
+					grad_pen.backward()
+					
+					for params in self.Dis_net.parameters():
+						params.requires_grad	= True					
+					
 					D_optmzr.step()
 					j	= j + 1
+					print('dis iter over')
 					
 				# Training the generator
 				# We don't want to evaluate the gradients for the Discriminator during Generator training
@@ -227,3 +217,23 @@ class ImpWGAN(object):
 
 		elif flag == True:
 			print('Training is over')
+			
+def calc_grad_pen(Dis_net, real_data, fake_data, lmbda, ngpu):
+	
+	# Getting the gradient penalty term
+	epsilon	= t.FloatTensor(real_data.size(1), real_data.size(2), real_data.size(3)).uniform_(0, 1)
+	epsilon = epsilon.expand_as(real_data)
+			
+	# The interpolate between real and fake is X_hat
+	X_hat	= epsilon*real_data + (1 - epsilon)*fake_data
+		
+	if ngpu > 0:
+		X_hat	= X_hat.cuda()
+	X_hatV	= V(X_hat, requires_grad=True)
+	otpt	= Dis_net(X_hatV)
+	otpt	= u.de_sigmoid(otpt)
+		
+	gradients	= t.autograd.grad(outputs=otpt.mean(0).view(1), inputs=X_hatV, create_graph=True, retain_graph=True, only_inputs=True)[0]
+	grad_pen	= (gradients.norm(2, dim=1) - 1).pow(2).mean().mul(lmbda)
+	
+	return grad_pen
