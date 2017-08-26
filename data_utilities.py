@@ -72,8 +72,8 @@ def CUB200_2010_loader(root, image_size, normalize=True):
 		# Extract the tarballs		
 		if 'raw' not in os.listdir(root):
 			os.mkdir('{0}/raw/'.format(root))
-		os.system('tar -xzf {0}/images.tgz -C .{0}/raw/'.format(root))
-		os.system('tar -xzf {0}/lists.tgz -C .{0}/raw/'.format(root))
+		os.system('tar -xzf {0}/images.tgz -C {0}/raw/'.format(root))
+		os.system('tar -xzf {0}/lists.tgz -C {0}/raw/'.format(root))
 		os.remove('{0}/images.tgz'.format(root))
 		os.remove('{0}/lists.tgz'.format(root))
 	else:
@@ -81,8 +81,8 @@ def CUB200_2010_loader(root, image_size, normalize=True):
 		os.system('wget http://www.vision.caltech.edu/visipedia-data/CUB-200/images.tgz --no-verbose --show-progress')
 		os.system('wget http://www.vision.caltech.edu/visipedia-data/CUB-200/lists.tgz --no-verbose --show-progress')
 		os.mkdir(root + '/raw')
-		os.system('tar -xzf {0}/images.tgz -C .{0}/raw/'.format(root))
-		os.system('tar -xzf {0}/lists.tgz -C .{0}/raw/'.format(root))
+		os.system('tar -xzf {0}/images.tgz -C {0}/raw/'.format(root))
+		os.system('tar -xzf {0}/lists.tgz -C {0}/raw/'.format(root))
 		os.remove('{0}/images.tgz'.format(root))
 		os.remove('{0}/lists.tgz'.format(root))
 	
