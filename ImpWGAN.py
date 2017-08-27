@@ -63,13 +63,13 @@ class ImpWGAN(object):
 		G_optmzr	= u.get_optimizer_with_params(optimizer_details['gen'])
 		D_optmzr	= u.get_optimizer_with_params(optimizer_details['dis'])
 		
-		inpt	= t.FloatTensor(batch_size, self.n_chan, self.image_size, self.image_size)
+		inpt	= t.FloatTensor(batch_size, self.n_chan*self.image_size*self.image_size)
 		noise	= t.FloatTensor(batch_size, self.n_z)
 		pos	= t.FloatTensor([1])
 		neg	= pos.mul(-1)
 		
 		if display_images == True:
-			fixed_noise	= t.randn(batch_size, self.n_z, 1, 1)
+			fixed_noise	= t.randn(batch_size, self.n_z)
 			
 		if 'init_scheme' is misc_options:
 			self.Gen_net.apply(u.weight_init_scheme)
@@ -118,32 +118,41 @@ class ImpWGAN(object):
 					
 					# Training with reals. These are obviously True in the discriminator's POV
 					X, _	= cur_data
+					X	= X.view(-1, self.image_size*self.image_size*self.n_chan)
 					if inpt.size() != X.size():
-						inpt.resize_(X.size(0), X.size(1), X.size(2), X.size(3))
+						inpt.resize_(X.size(0), X.size(1))
 					inpt.copy_(X)
 					inptV	= V(inpt)
 					
 					otpt	= self.Dis_net(inptV)
-					err_D_r	= (otpt.mean(0)).view(1)
-					err_D_r.backward(neg)
+					err_D_r	= otpt.mean()
+					err_D_r.backward(pos)
 					
 					# Training with fakes. These are false in the discriminator's POV
 					
 					# We want same amount of fake data as real data
 					if noise.size(0) != inpt.size(0):
-						noise.resize_(inpt.size(0), noise.size(1), noise.size(2), noise.size(3))
+						noise.resize_(inpt.size(0), noise.size(1))
 					noise.normal_(0, 1)
 					noiseV	= V(noise)
 					X_f	= self.Gen_net(noiseV)
 					otpt	= self.Dis_net(X_f)
-					err_D_f	= (otpt.mean(0)).view(1)
-					err_D_f.backward(pos)
+					err_D_f	= otpt.mean()
+					err_D_f.backward(neg)
 								
 					# Gradient penalty term
-					grad_pen	= self.calc_grad_pen(X, X_f.cpu().data, lmbda)
+					epsilon		= t.rand(X.size(0), 1)
+					epsilon		= epsilon.expand_as(X_f)
+					diffs		= X_f.cpu().data - X
+					intrplts	= X + epsilon*diffs
+					if self.ngpu > 0:
+						intrplts	= intrplts.cuda()
+					intrpltsV	= V(intrplts, requires_grad=True)
+					grads		= t.autograd.grad(outputs=self.Dis_net(intrpltsV).mean(), inputs=intrpltsV, create_graph=True, retain_graph=True, only_inputs=True)[0]
+					grad_pen	= (((grads.norm(2, dim=1) - 1).pow(2)).mean()) * lmbda
 					grad_pen.backward(pos)
 					
-					err_D	= err_D_r - err_D_f
+					err_D	= err_D_f - err_D_r + grad_pen
 					D_optmzr.step()
 					j	= j + 1
 					
@@ -161,7 +170,7 @@ class ImpWGAN(object):
 				noiseV	= V(noise)
 				X_gen	= self.Gen_net(noiseV)
 				otpt	= self.Dis_net(X_gen)
-				err_G	= (otpt.mean(0)).view(1)
+				err_G	= otpt.mean()
 				err_G.backward(neg)
 				G_optmzr.step()
 				
@@ -179,7 +188,7 @@ class ImpWGAN(object):
 						# Normalizing the images to look better
 						if self.n_chan > 1:
 							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
-						tv_utils.save_image(gen_imgs.data, 'WGAN_Generated_images@iteration={0}.png'.format(gen_iters))
+						tv_utils.save_image(gen_imgs.data, 'ImpWGAN_Generated_images@iteration={0}.png'.format(gen_iters))
 
 				if gen_iters == n_iters:
 					flag	= True
@@ -193,23 +202,6 @@ class ImpWGAN(object):
 		elif flag == True:
 			print('Training is over')
 			
-	def calc_grad_pen(self, real_data, fake_data, lmbda):
-	
-		epsilon	= t.FloatTensor(real_data.size(1), real_data.size(2), real_data.size(3)).uniform_(0, 1)
-		epsilon = epsilon.expand_as(real_data)
-					
-		# The interpolate between real and fake is X_hat.
-		X_hat	= epsilon*real_data + (1 - epsilon)*fake_data
-		if self.ngpu > 0:
-			X_hat	= X_hat.cuda()
-		X_hatV	= V(X_hat, requires_grad=True)
-		otpt	= self.Dis_net(X_hatV)
-					
-		gradients	= t.autograd.grad(outputs=otpt.mean(0).view(1), inputs=X_hatV, create_graph=True, retain_graph=True, only_inputs=True)[0]
-		grad_pen	= (gradients.norm(2, dim=1) - 1).pow(2).mean().mul(lmbda)
-		
-		return grad_pen
-
 class Generator(nn.Module):
 	def __init__(self, image_size, n_z, n_chan, n_hidden, ngpu):
 		super(Generator, self).__init__()
@@ -231,7 +223,6 @@ class Generator(nn.Module):
 		# 3. Only last layer: tanh(). All others get ReLU()
 		
 		main_fc.add_module('linear_{0}-{1}-{2}'.format(layer, n_z, 4*4*n_hidden), nn.Linear(n_z, 4*4*n_hidden))
-		main_fc.add_module('batchnorm_{0}-{1}'.format(layer, 4*4*n_hidden), nn.BatchNorm1d(4*4*n_hidden))
 		main_fc.add_module('ReLU_{0}'.format(layer), nn.ReLU(True))
 		
 		# Current feature map size is 4 x 4
@@ -240,7 +231,7 @@ class Generator(nn.Module):
 		main_conv	= nn.Sequential()
 		while cur_size < image_size//2:
 			layer	= layer + 1
-			main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_hidden//2), nn.ConvTranspose2d(n_hidden, n_hidden//2, kernel_size=4, stride=2, padding=1, bias=False))
+			main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_hidden//2), nn.ConvTranspose2d(n_hidden, n_hidden//2, kernel_size=4, stride=2, padding=1))
 			main_conv.add_module('batchnorm_{0}-{1}'.format(layer, n_hidden//2), nn.BatchNorm2d(n_hidden//2))
 			main_conv.add_module('ReLU_{0}'.format(layer), nn.ReLU(True))
 			cur_size	= cur_size * 2
@@ -249,8 +240,11 @@ class Generator(nn.Module):
 		# The last conv layer makes your generated image
 		
 		layer	= layer + 1
-		main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_chan), nn.ConvTranspose2d(n_hidden, n_chan, kernel_size=4, stride=2, padding=1, bias=False))
-		main_conv.add_module('TanH_{0}'.format(layer), nn.Tanh())
+		main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_chan), nn.ConvTranspose2d(n_hidden, n_chan, kernel_size=4, stride=2, padding=1))
+		if n_chan > 1:
+			main_conv.add_module('TanH_{0}'.format(layer), nn.Tanh())
+		else:
+			main_conv.add_module('Sigmoid_{0}'.format(layer), nn.Sigmoid())
 		
 		self.main_fc	= main_fc
 		self.main_conv	= main_conv		
@@ -264,6 +258,7 @@ class Generator(nn.Module):
 			pass_	= self.main_fc(input)
 			pass_	= pass_.view(-1, self.n_hidden, 4, 4)
 			pass_	= self.main_conv(pass_)
+		pass_	= pass_.view(-1, self.image_size*self.image_size*self.n_chan)
 		return pass_
 		
 class Discriminator(nn.Module):
@@ -276,11 +271,11 @@ class Discriminator(nn.Module):
 		main_conv	= nn.Sequential()
 		
 		# Details to be followed:
-		# 1. LeakyReLU activations everywhere
+		# 1. ReLU activations everywhere
 		# 2. No BatchNorm anywhere
 		# 3. Last Layer is a simple fully-connected layer
 		
-		main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_chan, n_hidden), nn.Conv2d(n_chan, n_hidden, kernel_size=4, stride=2, padding=1, bias=False))
+		main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_chan, n_hidden), nn.Conv2d(n_chan, n_hidden, kernel_size=4, stride=2, padding=1))
 		main_conv.add_module('LeakyReLU_{0}'.format(layer), nn.LeakyReLU(0.2, inplace=True))
 		
 		# Current feature map size is image_size/2 x image_size/2
@@ -288,7 +283,7 @@ class Discriminator(nn.Module):
 		cur_size	= image_size // 2
 		while cur_size > 4:
 			layer	= layer + 1
-			main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_hidden*2), nn.Conv2d(n_hidden, n_hidden*2, kernel_size=4, stride=2, padding=1, bias=False))
+			main_conv.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_hidden*2), nn.Conv2d(n_hidden, n_hidden*2, kernel_size=4, stride=2, padding=1))
 			main_conv.add_module('LeakyReLU_{0}'.format(layer), nn.LeakyReLU(0.2, inplace=True))
 			cur_size	= cur_size // 2
 			n_hidden	= n_hidden * 2
@@ -301,17 +296,19 @@ class Discriminator(nn.Module):
 		
 		self.main_fc	= main_fc
 		self.main_conv	= main_conv
+		self.image_size	= image_size
 		self.n_hidden	= n_hidden
 		self.n_chan	= n_chan
 		self.ngpu	= ngpu
 
 	def forward(self, input):
+		pass_	= input.view(-1, self.n_chan, self.image_size, self.image_size)
 		if self.ngpu > 1:
-			pass_	= nn.parallel.data_parallel(self.main_conv, input, range(0, self.ngpu))
+			pass_	= nn.parallel.data_parallel(self.main_conv, pass_, range(0, self.ngpu))
 			pass_.view(-1, 4*4*self.n_hidden)
-			pass_	= self.main_fc(pass_)
+			pass_	= nn.parallel.data_parallel(self.main_fc, pass_, range(0, self.ngpu))
 		else:
-			pass_	= self.main_conv(input)
+			pass_	= self.main_conv(pass_)
 			pass_	= pass_.view(-1, 4*4*self.n_hidden)
 			pass_	= self.main_fc(pass_)
 		return pass_
