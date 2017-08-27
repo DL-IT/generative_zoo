@@ -26,34 +26,28 @@ elif dset == 'lsun':
 # Please check the documentation using help(W.ImpWGAN.__init__)
 image_size	= 32
 n_z		= 128
-options		= {'generator'		: {'type'	: 'dc',
-				 	   'hidden'	: 64
-					  },
-		   'discriminator'	: {'type'	: 'mlp',
-		   			   'hidden'	: 64,
-		   			   'depth'	: 4
-		   			  }	
+hiddens		= {'gen'	: 64,
+		   'dis'	: 64
 		  }
 ngpu		= 1
 
-Gen_model	= W.ImpWGAN(image_size=image_size, n_z=n_z, n_chan=n_chan, options=options, ngpu=ngpu)
+Gen_model	= W.ImpWGAN(image_size=image_size, n_z=n_z, n_chan=n_chan, hiddens=hiddens, ngpu=ngpu)
 
 # ImpWGAN training scheme
 # Parameters below can be modified based on required usage.
 # Please check the documentation using help(W.ImpWGAN.train) for more details
 
-batch_size	= 100
+batch_size	= 64
 n_iters		= 1e05
 dis_iters_per_gen_iter	= 5
 lmbda		= 10
 opt_dets	= {'gen':	{'name'		: 'adam',
 				 'learn_rate'	: 1e-04,
-				 'betas'	: (0.5, 0.99)
+				 'betas'	: (0.0, 0.9)
 				},
-		   'dis':	{'name'		: 'sgd',
+		   'dis':	{'name'		: 'adam',
 		   		 'learn_rate'	: 1e-04,
-		   		 'momentum'	: 0.9,
-		   		 'nesterov'	: True
+		   		 'betas'	: (0.0, 0.9),
 		   		}
 		  }
 
