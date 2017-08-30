@@ -25,6 +25,7 @@ generative_zoo is a repository that provides working implementations of some gen
 | CIFAR10 | Color Image Recoginition dataset | [Alex Krizhevsky](https://www.cs.toronto.edu/~kriz/learning-features-2009-TR.pdf) |
 | LSUN | Large Scene Understanding | [Fisher Yu et al.](http://lsun.cs.princeton.edu/) |
 | CUB200 | Birds Dataset | [Wellinder et al.](https://http://www.vision.caltech.edu/visipedia/CUB-200.html) |
+| FASHION-MNIST | Clothes dataset with similar characteristics as MNIST | [Zalando Research](https://github.com/zalandoresearch/fashion-mnist) 
 
 ### Requirements
 
