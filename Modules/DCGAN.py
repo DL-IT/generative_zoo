@@ -6,31 +6,106 @@ import torchvision.utils as tv_utils
 from torch.autograd import Variable as V
 
 class DCGAN(object):
-	def __init__(self, image_size, n_z, n_chan, hiddens, ngpu, loss='BCE'):
+	def __init__(self, arch, ngpu, loss='BCE'):
 		"""
 		DCGAN object. This class is a wrapper of a generalized DCGAN as explained in the paper: 
 			UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS by Alec Radford et.al.
 		
 		Instance of this class initializes the Generator and the Discriminator.
 		Arguments:
-			image_size		= Height / width of the real images
-			n_z			= Dimensionality of the latent space
-			n_chan			= Number of channels of the real images
-			hiddens			= Number of feature maps in the first layer of the generator and discriminator
-						  Format:
-						  	hiddens = {'gen': n_gen_hidden, 
-						  		   'dis': n_dis_hidden
-						  		  }
+			arch			= Architecture to use:
+							"CIFAR10" for CIFAR10 dataset
+							"MNIST" for MNIST dataset
+							"Generic" for a general Generator and Discriminator architecture
+						  
+						  For CIFAR10/MNIST: Need to input n_z also. 
+						  For Generic: Need to input image_size, n_z, n_chan, hiddens
+						  
+						  {'arch_type': <arch_type>,
+						   'params'   : <params> as above
+						  }
+						  
+						  Example:
+						  {'arch_type': "CIFAR10",
+						   'params'   : {'n_z' : 128
+						   		}
+						  }
+						  {'arch_type': "Generic",
+						   'params'   : {'image_size'	: 32,
+						    		 'n_z'		: 128,
+						    		 'n_chan'	: 3,
+						    		 'hiddens'	: <see below>
+						    		}
+						  }
+
+							image_size		= Height / width of the real images
+							n_z			= Dimensionality of the latent space
+							n_chan			= Number of channels of the real images
+							hiddens			= Number of feature maps in the first layer of the generator and discriminator
+										  Format:
+										  	hiddens = {'gen': n_gen_hidden, 
+										  		   'dis': n_dis_hidden
+										  		  }
 			ngpu			= Number of gpus to be allocated, if to be run on gpu
 			loss			= The loss function to be used
 		"""
 		super(DCGAN, self).__init__()
-		self.Gen_net	= Generator(image_size, n_z, n_chan, hiddens['gen'], ngpu)
-		self.Dis_net	= Discriminator(image_size, n_chan, hiddens['dis'], ngpu)
+		if arch['arch_type'] == 'Generic':
+			from Generic import Generator
+			self.Gen_net	= Generator(
+							image_size	= arch['params']['image_size'],
+							n_z		= arch['params']['n_z'], 
+							n_chan		= arch['params']['n_chan'],
+							n_hidden	= arch['params']['hiddens']['gen'],
+							ngpu		= ngpu
+							
+						   )
+						   
+			from Generic import Discriminator
+			self.Dis_net	= Discriminator(
+							image_size	= arch['params']['image_size'],
+							n_chan		= arch['params']['n_chan'],
+							n_hidden		= arch['params']['hiddens']['dis'],
+							ngpu		= ngpu
+							)
+
+			self.image_size	= arch['params']['image_size']
+			self.n_chan	= arch['params']['n_chan']
+							
+		elif arch['arch_type'] == 'MNIST':
+			from MNIST import Generator
+			self.Gen_net	= Generator(
+							n_z		= arch['params']['n_z'],
+						   	ngpu		= ngpu
+						   )
+						   
+			from MNIST import Discriminator
+			self.Dis_net	= Discriminator(
+							ngpu		= ngpu
+							)
+
+			self.image_size	= 28
+			self.n_chan	= 1
+		
+		elif arch['arch_type'] == 'CIFAR10':
+			from CIFAR10 import Generator
+			self.Gen_net	= Generator(
+							n_z		= arch['params']['n_z'],
+							ngpu		= ngpu,
+							gen_type	= arch['params']['gen_type']
+						   )
+						   
+			from CIFAR10 import Discriminator
+			self.Dis_net	= Discriminator(
+							ngpu		= ngpu,
+							dis_type	= arch['params']['dis_type']
+							)
+
+			self.image_size	= 32
+			self.n_chan	= 3
+						
 		self.ngpu	= ngpu
-		self.n_z	= n_z
-		self.image_size	= image_size
-		self.n_chan	= n_chan
+		self.n_z	= arch['params']['n_z']
 		if loss == 'BCE':
 			self.loss	= nn.BCELoss()
 		elif loss == 'MSE':
@@ -177,113 +252,3 @@ class DCGAN(object):
 			
 		elif flag == True:
 			print('Training is over')
-				
-# Generator net
-
-class Generator(nn.Module):
-	def __init__(self, image_size, n_z, n_chan, n_hidden, ngpu):
-		super(Generator, self).__init__()
-		
-		assert image_size % 16 == 0, "Image size should be a multiple of 16"
-		
-		layer	= 1
-		main	= nn.Sequential()
-		
-		# Details to be followed:
-		# 1. ReLU for activation for all but the last layer
-		# 2. Batchnorm for all but the last layer
-		# 3. No fully connected layers
-		
-		# The first conv layer transforms the noise into a set of n_hidden feature maps
-
-		main.add_module('conv_{0}-{1}-{2}'.format(layer, n_z, n_hidden), nn.ConvTranspose2d(n_z, n_hidden, kernel_size=4, stride=1, padding=0, bias=False))
-		main.add_module('batchnorm_{0}-{1}'.format(layer, n_hidden), nn.BatchNorm2d(n_hidden))
-		main.add_module('ReLU_{0}'.format(layer), nn.ReLU(True))
-		
-		# Current feature map size is 4
-		cur_size	= 4
-		
-		# Keep enlarging the feature map until before it reaches the size of the image
-		while cur_size < image_size//2 :
-			layer = layer + 1
-			main.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_hidden//2), nn.ConvTranspose2d(n_hidden, n_hidden//2, kernel_size=4, stride=2, padding=1, bias=False))
-			main.add_module('batchnorm_{0}-{1}'.format(layer, n_hidden//2), nn.BatchNorm2d(n_hidden//2))
-			main.add_module('ReLU_{0}'.format(layer), nn.ReLU(True))
-			
-			n_hidden	= n_hidden // 2
-			cur_size	= cur_size * 2
-			
-		# The last conv layer transforms existing feature maps into n_chan feature maps of the size of the image
-		
-		layer	= layer + 1
-		main.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_chan), nn.ConvTranspose2d(n_hidden, n_chan, kernel_size=4, stride=2, padding=1, bias=False))
-		main.add_module('TanH_{0}'.format(layer), nn.Tanh())
-		
-		self.main	= main
-		self.image_size	= image_size
-		self.n_z	= n_z
-		self.n_hidden	= n_hidden
-		self.n_chan	= n_chan
-		self.ngpu	= ngpu
-		
-	def forward(self, input):
-		if self.ngpu > 0:
-			output	= nn.parallel.data_parallel(self.main, input, range(0, self.ngpu))
-		else:
-			output	= self.main(input)			
-		return output
-		
-# Discriminator net
-
-class Discriminator(nn.Module):
-	def __init__(self, image_size, n_chan, n_hidden, ngpu):
-		super(Discriminator, self).__init__()
-	
-		assert image_size % 16 == 0, "Image size should be a multiple of 16"
-	
-		layer	= 1
-		main	= nn.Sequential()
-	
-		# Details to be followed:
-		# 1. Leaky ReLU activation for all but the first and last layer
-		# 2. Batchnorm for all but the last layer
-		# 3. No fully connected layers
-	
-		# The first conv layer transforms the image into a smaller feature map
-	
-		main.add_module('conv_{0}-{1}-{2}'.format(layer, n_chan, n_hidden), nn.Conv2d(n_chan, n_hidden, kernel_size=4, stride=2, padding=1, bias=False))
-		main.add_module('LeakyReLU_{0}'.format(layer), nn.LeakyReLU(0.2, inplace=True))
-		
-		# Current feature map size is image_size/2
-		
-		cur_size	= image_size // 2
-		
-		# Keep diminishing the size of feature map until before it reaches 4
-		while cur_size > 4:
-			layer	= layer + 1
-			main.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, n_hidden*2), nn.Conv2d(n_hidden, n_hidden*2, kernel_size=4, stride=2, padding=1, bias=False))
-			main.add_module('batchnorm_{0}-{1}'.format(layer, n_hidden*2), nn.BatchNorm2d(n_hidden*2))
-			main.add_module('LeakyReLU_{0}'.format(layer), nn.LeakyReLU(0.2, inplace=True))
-			
-			cur_size	= cur_size // 2
-			n_hidden	= n_hidden * 2
-			
-		# The last conv layer transforms the K x 4 x 4 feature map into a K dimensional output vector
-		
-		layer	= layer + 1		
-		main.add_module('conv_{0}-{1}-{2}'.format(layer, n_hidden, 1), nn.Conv2d(n_hidden, 1, kernel_size=4, stride=1, padding=0, bias=False))
-		main.add_module('Sigmoid_{0}'.format(layer), nn.Sigmoid())
-		
-		self.main	= main
-		self.image_size	= image_size
-		self.n_hidden	= n_hidden
-		self.n_chan	= n_chan
-		self.ngpu	= ngpu
-		
-	def forward(self, input):
-		if self.ngpu > 0:
-			output	= nn.parallel.data_parallel(self.main, input, range(0, self.ngpu))
-		else:
-			output	= self.main(input)
-		return output.view(-1, 1)
-
