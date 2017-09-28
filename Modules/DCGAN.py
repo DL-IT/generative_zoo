@@ -175,6 +175,8 @@ class DCGAN(object):
 		while not flag:
 			for i, itr in enumerate(d_loader):
 				
+				self.Gen_net.train()
+				self.Dis_net.train()
 				# Training the discriminator
 				# We don't want to evaluate the gradients for the Generator during Discriminator training
 				self.Dis_net.zero_grad()
@@ -234,11 +236,10 @@ class DCGAN(object):
 				# Saving the generated images every show_period*5 iterations
 				if display_images == True:
 					if gen_iters % (show_period*5) == 0:
+						self.Gen_net.eval()
 						gen_imgs	= self.Gen_net(V(fixed_noise))
 						
-						# DeNormalizing the images to look better
-						if self.n_chan > 1:
-							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
+						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
 						tv_utils.save_image(gen_imgs.data, 'DCGAN_Generated_images@iteration={0}.png'.format(gen_iters))
 
 				if gen_iters == n_iters:

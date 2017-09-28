@@ -33,6 +33,14 @@ generative_zoo is a repository that provides working implementations of some gen
 + **PyTorch 0.2 or better** (If you want to test other models except Improved WGAN : then you can use **PyTorch 0.10 or better**)
 + **Torchvision**
 
+### File Structure
+
++ `Architectures` contains dataset specific architectures (currently only for MNIST and CIFAR10) and a Generic Architecture generator
++ `Modules` contains the key modules of the GANs
++ `Mains` contains the sample Main files written for the GANs
++ `Utilities` contains some utility files and CUB200 and FASHION-MNIST dataset loaders
++ `Examples` contain some GIFs that show the variation in the improving quality of generated images with time
+
 ### Usage of the implementations
 
 The implementations have been designed to ensure quick and fast usage.

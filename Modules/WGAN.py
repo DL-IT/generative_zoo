@@ -1,6 +1,4 @@
 import torch as t
-import DCGAN as dc
-import MLPGAN as mlp
 import utilities as u
 import torch.nn as nn
 import torch.utils.data as d_utils
@@ -8,48 +6,101 @@ import torchvision.utils as tv_utils
 from torch.autograd import Variable as V
 
 class WGAN(object):
-	def __init__(self, image_size, n_z, n_chan, options, ngpu):
+	def __init__(self, arch, ngpu):
 		"""
 		WGAN object. This class is a wrapper of a generalized WGAN as explained in the paper:
 		WASSERSTEIN GANS by Arjovsky et.al.
 		
 		Instance of this class initializes the Generator and the Discriminator.
 		Arguments:
-			image_size		= Height / width of the real images
-			n_z			= Dimensionality of the latent space
-			n_chan			= Number of channels of the real images
-			options			= This specifies the type of network for the generator and discriminator, along with their parameters
-						  Format:
-						  	options = {'generator':
-						  				{'type'	: dc/mlp
-						  				 'hidden': common for both dc and mlp (meanings differ as mentioned in their respective classes
-						  				 'depth': if mlp, the depth of the network
-						  				},
-						  				
-						  		   'discriminator':
-						  		   		<SAME AS ABOVE>
-						  		   }
+			arch			= Architecture to use:
+							"CIFAR10" for CIFAR10 dataset
+							"MNIST" for MNIST dataset
+							"Generic" for a general Generator and/or Discriminator
+								
+						  For CIFAR10/MNIST: Need to input n_z also
+						  For Generic: Need to input, image_size, n_z, n_chan, hiddens
+						  
+						  {'arch_type'	: "CIFAR10",
+						   'params'	: {'n_z' : 128
+						   		  }
+						  }
+						  {'arch_type'	: "Generic",
+						   'params'	: {'image_size'	: 32,
+						   		   'n_z'	: 128,
+						   		   'n_chan'	: 3,
+						   		   'hiddens'	: <see below>
+						   		  }
+						  }
+						  
+						  	image_size	= Height / width of the real images
+						  	n_z		= Dimensionality of the latent space
+						  	n_chan		= Number of channels of the real images
+						  	hiddens		= Number of feature maps in the first layer of the generator and discriminator
+						  			  Format:
+						  			  	hiddens = {'gen':	n_gen_hidden,
+						  			  		   'dis':	n_dis_hidden
+						  			  		  }
+						  
 			ngpu			= Number of gpus to be allocated, if to be run of gpu
 		"""
 		super(WGAN, self).__init__()
-		gen_type	= options['generator']['type']
-		dis_type	= options['discriminator']['type']
-		
-		if gen_type == 'dc':
-			self.Gen_net	= dc.Generator(image_size, n_z, n_chan, options['generator']['hidden'], ngpu)
-		elif gen_type == 'mlp':
-			self.Gen_net	= mlp.Generator(image_size, n_z, n_chan, options['generator']['hidden'], options['generator']['depth'], ngpu)
-		
-		if dis_type == 'dc':
-			self.Dis_net	= dc.Discriminator(image_size, n_chan, options['discriminator']['hidden'], ngpu)
-		elif dis_type == 'mlp':
-			self.Dis_net	= mlp.Discriminator(image_size, n_chan, options['discriminator']['hidden'], options['discriminator']['depth'], ngpu)
+		if arch['arch_type'] == 'Generic':	
+			from Generic import Generator
+			self.Gen_net	= Generator(
+							image_size	= arch['params']['image_size'],
+							n_z		= arch['params']['n_z'],
+							n_chan		= arch['params']['n_chan'],
+							n_hidden	= arch['params']['hiddens']['gen'],
+							ngpu		= ngpu
+						   )
 			
+			from Generic import Discriminator
+			self.Dis_net	= Discriminator(
+							image_size	= arch['params']['image_size'],
+							n_chan		= arch['params']['n_chan'],
+							n_hidden	= arch['params']['hiddens']['dis'],
+							ngpu		= ngpu
+							)
+							
+			self.image_size	= arch['params']['image_size']
+			self.n_chan	= arch['params']['n_chan']
+			
+		elif arch['arch_type'] == 'MNIST':
+			from MNIST import Generator
+			self.Gen_net	= Generator(
+							n_z		= arch['params']['n_z'],
+							ngpu		= ngpu
+						   )
+			
+			from MNIST import Discriminator
+			self.Dis_net	= Discriminator(
+							ngpu		= ngpu
+							)
+
+			self.image_size	= 28
+			self.n_chan	= 1
+							
+		elif arch['arch_type'] == 'CIFAR10':
+			from CIFAR10 import Generator
+			self.Gen_net	= Generator(
+							n_z		= arch['params']['n_z'],
+							gen_type	= arch['params']['gen_type'],
+							ngpu		= ngpu
+						   )
+			
+			from CIFAR10 import Discriminator
+			self.Dis_net	= Discriminator(
+							dis_type	= arch['params']['dis_type'],
+							ngpu		= ngpu
+							)
+							
+			self.image_size	= 32
+			self.n_chan	= 3
+
 		self.ngpu	= ngpu
-		self.n_z	= n_z
-		self.image_size	= image_size
-		self.n_chan	= n_chan
-		
+		self.n_z	= arch['params']['n_z']
+												
 	def train(self, dataset, batch_size, n_iters, dis_iters_per_gen_iter, clamps, optimizer_details, show_period=50, display_images=True, misc_options=['init_scheme', 'save_model']):
 		"""
 		Train function of the WGAN class. This starts training the model.
@@ -108,6 +159,9 @@ class WGAN(object):
 				
 			self.Gen_net	= self.Gen_net.cuda()
 			self.Dis_net	= self.Dis_net.cuda()
+			
+		self.Gen_net.train()
+		self.Dis_net.train()
 			
 		d_loader	= d_utils.DataLoader(dataset, batch_size, shuffle=True)
 		
@@ -198,13 +252,12 @@ class WGAN(object):
 				# Saving the generated images every show_period*5 iterations
 				if display_images == True:
 					if gen_iters % (show_period*5) == 0:
+						self.Gen_net.eval()
 						gen_imgs	= self.Gen_net(V(fixed_noise))
 						
-						# Normalizing the images to look better
-						if self.n_chan > 1:
-							gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
+						gen_imgs.data	= gen_imgs.data.mul(0.5).add(0.5)
 						tv_utils.save_image(gen_imgs.data, 'WGAN_Generated_images@iteration={0}.png'.format(gen_iters))
-
+						self.Gen_net.train()
 				if gen_iters == n_iters:
 					flag	= True
 					break

@@ -58,7 +58,7 @@ class Generator(nn.Module):
 			main.add_module('ConvTranspose2d_{0}-{1}-{2}'.format(layer, 64, 3),
 					nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=4, stride=2, padding=1))
 			main.add_module('BatchNorm2d_{0}-{1}'.format(layer, 64), nn.BatchNorm2d(3))
-			main.add_module('ReLU_{0}'.format(layer), nn.ReLU(True))
+			main.add_module('TanH_{0}'.format(layer), nn.Tanh())
 			self.cv	= main
 		
 		elif gen_type == 'resi':
