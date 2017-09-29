@@ -1,8 +1,8 @@
 # This is a sample main file highlighting the usage of WGAN module in WGAN.py
 # Please edit this file based on your requirements
 import sys
-import WGAN as W
-import data_utilities as d_u
+from generative_zoo.Models import WGAN as W
+from generative_zoo.Utilities import data_utilities as d_u
 
 # Dataset
 dset	= sys.argv[1]

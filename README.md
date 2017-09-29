@@ -43,31 +43,4 @@ generative_zoo is a repository that provides working implementations of some gen
 
 ### Usage of the implementations
 
-The implementations have been designed to ensure quick and fast usage.
-
-Below is a pipeline:
-
-1. **Import the modules.** 
-```py
-import xGAN as x
-import data_utilities as d_u
-```
-Please note that `data_utilities` was designed so that the common dataset as extracted from `torchvision` can be used without unnecessary hitches. You can proceed to use your own implementations, but please make sure that the datasets as objects from `torchvision`. Support if required, will be added for non-`torchvision` dataset objects as well.
-
-2. **Get your dataset**
-```py
-dataset	= y.loader()
-```
-Currently, `y` is one of _MNIST_, _CIFAR10_ and _LSUN_.
-If you dataset is not available on your system, make sure you are connected to a network so that `torchvision` can do the necessary. Parameters to be passed to the loader function depends on the dataset you are using. For any help, please open the Python interpreter in your terminal or your IPython notebook and enter `help(d_u)`.
-
-3. **Initialize all your hyperparameters of the model and the optimizer, create and train your model**
-```py
-my_gan	= x.xGAN()
-my_gan.train()
-```
-The parameters passed for the object initialization and the train function is specified in detail in the documentation of the functions themselves and vary from model to model. Please open the Python interpreter in your terminal or your IPython notebook and enter `help(my_gan)` or `help(x.xGAN)`.
-
-*That is it, you have your model ready to test*.
-
-If the above tutorial is unclear, please feel free to clone this repo and make use of the Main template files. Thanks!!
+__TO BE ADDED SOON__

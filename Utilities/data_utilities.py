@@ -1,6 +1,6 @@
-from cub200 import CUB2002010
+from .cub200 import CUB2002010
 import torchvision.datasets as dset
-from fashion_mnist import FASHIONMNIST
+from .fashion_mnist import FASHIONMNIST
 import torchvision.transforms as transforms
 
 def MNIST_loader(root, image_size, normalize=True):

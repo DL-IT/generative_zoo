@@ -1,5 +1,5 @@
 import torch as t
-import utilities as u
+from ..Utilities import utilities as u
 import torch.nn as nn
 import torch.utils.data as d_utils
 import torchvision.utils as tv_utils
@@ -46,8 +46,8 @@ class WGAN(object):
 		"""
 		super(WGAN, self).__init__()
 		if arch['arch_type'] == 'Generic':	
-			from Generic import Generator
-			self.Gen_net	= Generator(
+			from ..Architectures import Generic as DG
+			self.Gen_net	= DG.Generator(
 							image_size	= arch['params']['image_size'],
 							n_z		= arch['params']['n_z'],
 							n_chan		= arch['params']['n_chan'],
@@ -55,8 +55,7 @@ class WGAN(object):
 							ngpu		= ngpu
 						   )
 			
-			from Generic import Discriminator
-			self.Dis_net	= Discriminator(
+			self.Dis_net	= DG.Discriminator(
 							image_size	= arch['params']['image_size'],
 							n_chan		= arch['params']['n_chan'],
 							n_hidden	= arch['params']['hiddens']['dis'],
@@ -67,14 +66,13 @@ class WGAN(object):
 			self.n_chan	= arch['params']['n_chan']
 			
 		elif arch['arch_type'] == 'MNIST':
-			from MNIST import Generator
-			self.Gen_net	= Generator(
+			from ..Architectures import MNIST as DG
+			self.Gen_net	= DG.Generator(
 							n_z		= arch['params']['n_z'],
 							ngpu		= ngpu
 						   )
 			
-			from MNIST import Discriminator
-			self.Dis_net	= Discriminator(
+			self.Dis_net	= DG.Discriminator(
 							ngpu		= ngpu
 							)
 
@@ -82,15 +80,14 @@ class WGAN(object):
 			self.n_chan	= 1
 							
 		elif arch['arch_type'] == 'CIFAR10':
-			from CIFAR10 import Generator
-			self.Gen_net	= Generator(
+			from ..Architectures import CIFAR10 as DG
+			self.Gen_net	= DG.Generator(
 							n_z		= arch['params']['n_z'],
 							gen_type	= arch['params']['gen_type'],
 							ngpu		= ngpu
 						   )
 			
-			from CIFAR10 import Discriminator
-			self.Dis_net	= Discriminator(
+			self.Dis_net	= DG.Discriminator(
 							dis_type	= arch['params']['dis_type'],
 							ngpu		= ngpu
 							)

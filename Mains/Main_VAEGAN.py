@@ -1,8 +1,8 @@
 # This is a sample main file highlighting the usage of VAEGAN module in VAEGAN.py
 # Please edit this file based on your requirements
 import sys
-import VAEGAN as vg
-import data_utilities as d_u
+from generative_zoo.Models import VAEGAN as vg
+from generative_zoo.Utilities import data_utilities as d_u
 
 # Dataset
 dset	= sys.argv[1]

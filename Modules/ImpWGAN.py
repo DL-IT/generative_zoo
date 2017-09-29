@@ -1,5 +1,5 @@
 import torch as t
-import utilities as u
+from ..Utilities import utilities as u
 import torch.nn as nn
 import torch.utils.data as d_utils
 import torchvision.utils as tv_utils

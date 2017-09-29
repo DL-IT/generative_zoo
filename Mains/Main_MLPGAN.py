@@ -1,8 +1,8 @@
 # This is a sample main file highlighting the usage of MLPGAN module in MLPGAN.py
 # Please edit this file based on your requirements
 import sys
-import MLPGAN as mlp
-import data_utilities as d_u
+from generative_zoo.Models import MLPGAN as mlp
+from generative_zoo.Utilities import data_utilities as d_u
 
 # Dataset
 dset	= sys.argv[1]

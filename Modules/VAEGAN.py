@@ -1,9 +1,9 @@
 import torch as t
 import numpy as np
-import utilities as u
 import torch.nn as nn
 import torch.utils.data as d_utils
 import torchvision.utils as tv_utils
+from ..Utilities import utilities as u
 from torch.autograd import Variable as V
 
 class VAEGAN(object):
