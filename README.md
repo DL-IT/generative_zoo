@@ -43,4 +43,31 @@ generative_zoo is a repository that provides working implementations of some gen
 
 ### Usage of the implementations
 
-__TO BE ADDED SOON__
++ Clone this repository using
+```bash
+git clone https://github.com/DL-IT/generative_zoo.git
+```
+
++ From the directory you have cloned into, you will be able to use the code. Just perform
+```python
+import generative_zoo
+```
+
++ There are multiple submodules such as `Architectures`, `Modules` and `Utilities`. 
+    + In `Architectures`, you can take a data-specific architecture for `MNIST` and `CIFAR10` and a generic architecture which can be used for any square image in general. You need to use it using the below code:
+    ```python
+    generator = generative_zoo.Architectures.<name>.Generator(*args)
+    discriminator = generative_zoo.Architectures.<name>.Discriminator(*args)
+    ```
+
+    Here `<name>` can be `CIFAR10`, `MNIST` or `Generic`.
+
+    + In `Modules`, you can take specific types of GANs which are listed above. This can be invoked using 
+    ```python
+    my_GAN = generative_zoo.Modules.<name>(*args)
+    ```
+    Here `<name>` can be any one of the above GAN types.
+
+    + In `Utilities`, you can have some basic utilities and dataset providers. Especially, `data_utilities` inside `Utilities` provides data of required size and certain other specifications.
+
++ In addition to all this, there are sample main files to give you an idea as to how the code works in all, available in `Mains`. This has to be accessed externally.
