@@ -77,7 +77,7 @@ class DCGAN(object):
     def train(self, dataset, batch_size, n_iters, optimizer_details, show_period=50,
               display_images=True, misc_options=['init_scheme', 'save_model']):
         """
-        Train function of the ALPHAGAN class. This starts training the model.
+        Train function of the DCGAN class. This starts training the model.
         Arguments:
             dataset = torch.utils.data.Dataset instance
             batch_size = batch size to be used throughout the training
