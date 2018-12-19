@@ -71,3 +71,8 @@ import generative_zoo
     + In `Utilities`, you can have some basic utilities and dataset providers. Especially, `data_utilities` inside `Utilities` provides data of required size and certain other specifications.
 
 + In addition to all this, there are sample main files to give you an idea as to how the code works in all, available in `Mains`. This has to be accessed externally.
+
+#### Some generations
+| MNIST | CIFAR10 |
+|-------|---------|
+|![MNIST Generation](generated_gifs/MNIST-DCGAN.gif)|![CIFAR10 Generation](generated_gifs/CIFAR10-conv-DCGAN.gif)|

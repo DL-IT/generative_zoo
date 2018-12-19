@@ -84,17 +84,13 @@ class DCGAN(object):
             n_iters = Number of generator iterations to run the training for
             optimizer_details = Dictionary representing the details for optimizers for generator and discriminator
                                 Format:
-                                optimizer_details = {'enc':
+                                optimizer_details = {'gen':
                                                         {'name' : Name of optimizer,
                                                          'learn_rate' : learning rate,
                                                          'betas' : (beta_1, beta_2), => Optional, if using Adam/Adamax
                                                          'momentum' : momentum, => Optional, if using momentum SGD/NAG
                                                          'nesterov' : True/False, => Optional, if using NAG},
-                                                     'gen':
-                                                       <SAME AS ABOVE>
                                                      'dis':
-                                                       <SAME AS ABOVE>
-                                                     'cde':
                                                        <SAME AS ABOVE>}
             show_period (opt) = Prints the errors with current iteration number every show_period iterations
             display_images (opt) = If true, saves the real, reconstructed and generated images

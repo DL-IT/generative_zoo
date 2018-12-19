@@ -49,11 +49,9 @@ class VAEGAN(object):
                                                          'betas' : (beta_1, beta_2), => Optional, if using Adam/Adamax
                                                          'momentum' : momentum, => Optional, if using momentum SGD/NAG
                                                          'nesterov' : True/False, => Optional, if using NAG},
-                                                     'gen':
+                                                     'dec':
                                                        <SAME AS ABOVE>
                                                      'dis':
-                                                       <SAME AS ABOVE>
-                                                     'cde':
                                                        <SAME AS ABOVE>}
             show_period (opt) = Prints the errors with current iteration number every show_period iterations
             display_images (opt) = If true, saves the real, reconstructed and generated images
